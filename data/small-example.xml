@@ -1,0 +1,8 @@
+<examples>
+  <array>
+    <element>one</element>
+    <element>two</element>
+    <element>three</element>
+  </array>
+  <some-data>foobar</some-data>
+</examples>
