@@ -1,12 +1,23 @@
 LIBXML_LIBS=$(shell xml2-config --libs)
 LIBXML_CFLAGS=$(shell xml2-config --cflags)
 CFLAGS=$(LIBXML_CFLAGS) \
-	-std=c99 \
-	-Wextra \
-	-Wall -W \
-	-Wno-missing-field-initializers \
 	-O0 \
-	-g -ggdb
+	-g -ggdb \
+	-pedantic \
+	-Wall \
+	-Wextra \
+	-Wshadow \
+	-Wrestrict \
+	-Wformat=2 \
+	-Wwrite-strings \
+	-Wcast-qual \
+	-Wpointer-arith \
+	-Wstrict-prototypes \
+	-Wmissing-prototypes \
+	-Wmissing-declarations \
+	-Wno-unused-parameter \
+	-Wno-missing-field-initializers
+
 
 LIBOBJS = xml2json.o
 

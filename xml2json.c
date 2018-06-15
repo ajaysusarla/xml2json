@@ -14,8 +14,9 @@
 #include <string.h>
 
 #include <libxml/parser.h>
+#include <libxml/chvalid.h>
 
-#define INDENT_SIZE 201
+#define INDENT_SIZE 101
 
 typedef struct _xml2jsonCtxt xml2jsonCtxt;
 typedef xml2jsonCtxt *xml2jsonCtxtPtr;
@@ -47,6 +48,51 @@ static void xml2jsonCleanCtxt(xml2jsonCtxtPtr ctxt _unused_)
 {
 }
 
+static void xml2jsonPrintSpaces(xml2jsonCtxtPtr ctxt)
+{
+        if ((ctxt->output != NULL) && (ctxt->depth > 0)) {
+                if (ctxt->depth < 50)
+                        fprintf(ctxt->output, "%s",
+                                &ctxt->indent[INDENT_SIZE - 2 *ctxt->depth]);
+                else
+                        fprintf(ctxt->output, "%s", ctxt->indent);
+        }
+}
+
+static void xml2jsonPrintString(xml2jsonCtxtPtr ctxt, const xmlChar * str)
+{
+        int i;
+
+        if (str == NULL) {
+                fprintf(ctxt->output, "()");
+                return;
+        }
+
+        for (i = 0; i < xmlStrlen(str); i++) {
+                if (str[i] == 0)
+                        return;
+                else if (xmlIsBlank_ch(str[i]))
+                        fputc(' ', ctxt->output);
+                else if (str[i] >= 0x80)
+                        fprintf(ctxt->output, "#%X", str[i]);
+                else
+                        fputc(str[i], ctxt->output);
+        }
+}
+
+static void xml2jsonPrintNameSpaceList(xml2jsonCtxtPtr ctxt, xmlNsPtr ns)
+{
+}
+
+
+static void xml2jsonPrintAttrList(xml2jsonCtxtPtr ctxt, xmlAttrPtr attr)
+{
+}
+
+static void xml2jsonPrintEntity(xml2jsonCtxtPtr ctxt, xmlEntityPtr ent)
+{
+}
+
 static void xml2jsonCtxtParseOneNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
 {
         if (node == NULL)
@@ -56,6 +102,12 @@ static void xml2jsonCtxtParseOneNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
 
         switch(node->type) {
         case XML_ELEMENT_NODE:
+                xml2jsonPrintSpaces(ctxt);
+                if ((node->ns != NULL) && (node->ns->prefix != NULL))  {
+                        fprintf(ctxt->output, ":");
+                }
+                xml2jsonPrintString(ctxt, node->name);
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_ATTRIBUTE_NODE:
                 break;
@@ -97,7 +149,33 @@ static void xml2jsonCtxtParseOneNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
         default:
                 fprintf(stderr, "Unknown node type %d\n", node->type);
                 return;
+        } /* switch() */
+
+        ctxt->depth++;
+
+        if ((node->type == XML_ELEMENT_NODE) && (node->nsDef != NULL))
+                xml2jsonPrintNameSpaceList(ctxt, node->nsDef);
+
+        if ((node->type == XML_ELEMENT_NODE) && (node->properties != NULL))
+                xml2jsonPrintAttrList(ctxt, node->properties);
+
+        if (node->type != XML_ENTITY_REF_NODE) {
+                if ((node->type != XML_ELEMENT_NODE) &&
+                    (node->content != NULL)) {
+                        xml2jsonPrintSpaces(ctxt);
+                        xml2jsonPrintString(ctxt, node->content);
+                        fprintf(ctxt->output, "\n");
+                }
+        } else {
+                xmlEntityPtr ent;
+
+                ent = xmlGetDocEntity(node->doc, node->name);
+                if (ent != NULL)
+                        xml2jsonPrintEntity(ctxt, ent);
         }
+
+        ctxt->depth--;
+
 }
 
 static void xml2jsonCtxtParseNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
@@ -136,7 +214,7 @@ static void xml2jsonCtxtParse(xml2jsonCtxtPtr ctxt, xmlDocPtr doc)
         }
 }
 
-void to_json(xmlDocPtr doc)
+static void to_json(xmlDocPtr doc)
 {
         xml2jsonCtxt ctxt;
 
