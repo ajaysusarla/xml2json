@@ -19,7 +19,11 @@ CFLAGS=$(LIBXML_CFLAGS) \
 	-Wno-missing-field-initializers
 
 
-LIBOBJS = xml2json.o
+LIBOBJS = \
+	cstring.o \
+	json.o \
+	util.o \
+	xml2json.o
 
 all: clean xml2json
 
