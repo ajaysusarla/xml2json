@@ -17,6 +17,87 @@
 /*
  * Private Functions
  */
+static void parse_json_object(JsonObject *object, cstring *str);
+
+static bool is_json_type_valid(unsigned int type)
+{
+        return (type <= JSON_OBJECT);
+}
+
+static void parse_string_object(const char *s, cstring *str)
+{
+        /* TODO: Make this function utf-8 aware */
+        cstring_addch(str, '"');
+        cstring_addstr(str, s);
+        cstring_addch(str, '"');
+}
+
+static void parse_num_object(double num, cstring *str)
+{
+        char buf[64];
+
+        sprintf(buf, "%.16g", num);
+        /* TODO: Check if `buf` has a valid number */
+        cstring_addstr(str, buf);
+}
+
+static void parse_array_object(JsonObject *object, cstring *str)
+{
+        JsonObject *element;
+
+        cstring_addch(str, '[');
+        json_foreach(element, object) {
+                parse_json_object(element, str);
+                if (element->next != NULL)
+                        cstring_addch(str, ',');
+        }
+        cstring_addch(str, ']');
+}
+
+static void parse_object(JsonObject *object, cstring *str)
+{
+        JsonObject *member;
+
+        cstring_addch(str, '{');
+
+        json_foreach(member, object) {
+                parse_string_object(member->key, str);
+                cstring_addch(str, ':');
+                parse_json_object(member, str);
+                if (member->next != NULL)
+                        cstring_addch(str, ',');
+        }
+
+        cstring_addch(str, '}');
+}
+
+static void parse_json_object(JsonObject *object, cstring *str)
+{
+        assert(is_json_type_valid(object->type));
+
+        switch (object->type) {
+        case JSON_NULL:
+                cstring_addstr(str, "null");
+                break;
+        case JSON_BOOL:
+                cstring_addstr(str, object->bool_ ? "true" : "false");
+                break;
+        case JSON_STRING:
+                parse_string_object(object->str_, str);
+                break;
+        case JSON_NUMBER:
+                parse_num_object(object->num_, str);
+                break;
+        case JSON_ARRAY:
+                parse_array_object(object, str);
+                break;
+        case JSON_OBJECT:
+                parse_object(object, str);
+                break;
+        default:
+                assert(false);
+        }
+}
 
 static const char *json_object_to_string(JsonObject *object)
 {
@@ -25,7 +106,7 @@ static const char *json_object_to_string(JsonObject *object)
 
         cstring_init(&jsonstr, 0);
 
-        /* TODO: Implement this */
+        parse_json_object(object, &jsonstr);
 
         return cstring_detach(&jsonstr, &len);
 }
@@ -163,7 +244,7 @@ JsonObject *json_new(void)
         return json_obj_new(JSON_OBJECT);
 }
 
-void json_append_element(JsonObject *array, JsonObject *element)
+void json_append_to_array(JsonObject *array, JsonObject *element)
 {
         assert(array->type == JSON_ARRAY);
         assert(element->parent == NULL);
@@ -171,7 +252,7 @@ void json_append_element(JsonObject *array, JsonObject *element)
         append_object(array, element);
 }
 
-void json_prepend_element(JsonObject *array, JsonObject *element)
+void json_prepend_to_array(JsonObject *array, JsonObject *element)
 {
         assert(array->type == JSON_ARRAY);
         assert(element->parent == NULL);
@@ -205,4 +286,13 @@ bool json_validate(JsonObject *object)
 void json_free(JsonObject *obj)
 {
         json_obj_free(obj);
+}
+
+JsonObject *json_first_child(JsonObject *object)
+{
+        if (object != NULL &&
+            (object->type == JSON_ARRAY || object->type == JSON_OBJECT))
+                return object->children.head;
+
+        return NULL;
 }

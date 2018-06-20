@@ -52,13 +52,25 @@ extern JsonObject *json_array_obj(void);
 extern JsonObject *json_new(void);
 extern void json_free(JsonObject *obj);
 
-extern void json_append_element(JsonObject *array, JsonObject *element);
-extern void json_prepend_element(JsonObject *array, JsonObject *element);
+/* array handler */
+extern void json_append_to_array(JsonObject *array, JsonObject *element);
+extern void json_prepend_to_array(JsonObject *array, JsonObject *element);
 
-extern void json_append_member(JsonObject *object, const char *key, JsonObject *value);
-extern void json_prepend_member(JsonObject *object, const char *key, JsonObject *value);
+/* object handler */
+extern void json_append_member(JsonObject *object, const char *key,
+                               JsonObject *value);
+extern void json_prepend_member(JsonObject *object, const char *key,
+                                JsonObject *value);
 
 extern bool json_validate(JsonObject *object);
+
+/* Iterators */
+extern JsonObject *json_first_child(JsonObject *object);
+
+#define json_foreach(i, object) \
+        for ((i) = json_first_child(object); \
+             (i) != NULL; \
+             (i) = (i)->next)
 
 #ifdef __cplusplus
 }

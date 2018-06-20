@@ -270,9 +270,27 @@ int main(int argc, char **argv)
 
         xmlFreeDoc(doc);
 
-        jsondoc = json_new();
+        #if 0
+        {
+                JsonObject *array;
+                JsonObject *children[5 + 1];
+                jsondoc = json_new();
 
-        json_free(jsondoc);
+                array = json_array_obj();
+
+                children[1] = json_num_obj(1);
+                children[2] = json_num_obj(2);
+                children[3] = json_num_obj(3);
+                json_append_to_array(array, children[1]);
+                json_append_to_array(array, children[3]);
+                json_append_to_array(array, children[2]);
+
+                json_append_member(jsondoc, "elements", array);
+
+                printf(">> %s\n", json_encode(jsondoc));
+                json_free(jsondoc);
+        }
+        #endif
 
         exit(EXIT_SUCCESS);
 }
