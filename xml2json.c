@@ -4,6 +4,8 @@
  */
 #define _unused_          __attribute__((unused))
 
+#include "json.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -232,6 +234,7 @@ int main(int argc, char **argv)
         xmlDocPtr doc = NULL;
         const char *base;
         int options = XML_PARSE_COMPACT | XML_PARSE_BIG_LINES;
+        JsonObject *jsondoc;
 
         if (argc != 2) {
                 fprintf(stderr, "%s <xml-file>\n", argv[0]);
@@ -266,6 +269,10 @@ int main(int argc, char **argv)
         to_json(doc);
 
         xmlFreeDoc(doc);
+
+        jsondoc = json_new();
+
+        json_free(jsondoc);
 
         exit(EXIT_SUCCESS);
 }

@@ -49,7 +49,8 @@ extern JsonObject *json_bool_obj(bool b);
 extern JsonObject *json_string_obj(const char *str);
 extern JsonObject *json_num_obj(double num);
 extern JsonObject *json_array_obj(void);
-extern JsonObject *json_obj(void);
+extern JsonObject *json_new(void);
+extern void json_free(JsonObject *obj);
 
 extern void json_append_element(JsonObject *array, JsonObject *element);
 extern void json_prepend_element(JsonObject *array, JsonObject *element);

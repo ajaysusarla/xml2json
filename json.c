@@ -73,7 +73,14 @@ static void json_obj_free(JsonObject *obj)
                         break;
                 case JSON_ARRAY:
                 case JSON_OBJECT:
+                {
+                        JsonObject *child, *next;
+                        for (child = obj->children.head; child != NULL; child = next) {
+                                next = child->next;
+                                json_obj_free(child);
+                        }
                         break;
+                }
                 default:
                         break;
                 }
@@ -151,7 +158,7 @@ JsonObject *json_array_obj(void)
         return json_obj_new(JSON_ARRAY);
 }
 
-JsonObject *json_obj(void)
+JsonObject *json_new(void)
 {
         return json_obj_new(JSON_OBJECT);
 }
@@ -193,4 +200,9 @@ void json_prepend_member(JsonObject *object, const char *key, JsonObject *value)
 bool json_validate(JsonObject *object)
 {
         return false;
+}
+
+void json_free(JsonObject *obj)
+{
+        json_obj_free(obj);
 }
