@@ -36,13 +36,15 @@ static void xml2jsonCtxtParseNodeList(xml2jsonCtxtPtr ctxt, xmlNodePtr node);
 
 static void xml2jsonInitCtxt(xml2jsonCtxtPtr ctxt)
 {
+        int i;
         ctxt->output = stdout;
         ctxt->depth = 0;
         ctxt->doc = NULL;
         ctxt->node = NULL;
         ctxt->dict = NULL;
         ctxt->options = 0;
-        memset(ctxt->indent, ' ', INDENT_SIZE - 1);
+        for (i = 0; i < INDENT_SIZE; i++)
+                ctxt->indent[i] = ' ';
         ctxt->indent[INDENT_SIZE] = 0;
 }
 
