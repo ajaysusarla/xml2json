@@ -21,6 +21,7 @@ CFLAGS=$(LIBXML_CFLAGS) \
 
 LIBOBJS = \
 	cstring.o \
+	htable.o \
 	json.o \
 	util.o \
 	xml2json.o
