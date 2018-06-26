@@ -26,7 +26,7 @@ LIBOBJS = \
 	util.o \
 	xml2json.o
 
-all: clean xml2json
+all: clean xml2json exh
 
 Makefile.dep:
 	gcc -MM *.c > Makefile.dep 2> /dev/null || true
@@ -39,10 +39,14 @@ Makefile.dep:
 xml2json: $(LIBOBJS)
 	gcc $(LIBXML_LIBS) -o xml2json $(LIBOBJS)
 
+exh: htable.o util.o
+	gcc $(CFLAGS) -c exh.c
+	gcc -o exh htable.o util.o exh.o
+
 check-syntax:
 	gcc $(CFLAGS) -Wextra -pedantic -fsyntax-only $(CHK_SOURCES)
 
 clean:
-	rm -f *.o Makefile.dep xml2json
+	rm -f *.o Makefile.dep xml2json exh
 
 .PHONY: all clean check-syntax

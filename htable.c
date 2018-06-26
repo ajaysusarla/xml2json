@@ -111,6 +111,7 @@ void htable_init(struct htable *ht, htable_cmp_fn cmp_fn,
 
         ht->cmpfn = cmp_fn ? cmp_fn : default_cmp_fn;
         ht->cmpfndata = cmpfndata;
+        ht->iter_head = ht->iter_tail = UINT_MAX;
 
         /* calculate initial size */
         size = size * 100 / HTABLE_RESIZE_THRESHOLD;
@@ -156,9 +157,32 @@ const void *htable_get_next(const struct htable *ht, const void *entry)
 void htable_put(struct htable *ht, void *entry)
 {
         unsigned int b = bucket(ht, entry);
+        int collision = 0;
+
+        collision = ht->table[b] ? 1 : 0;
+
+        if (collision) {
+                ((struct htable_entry *) entry)->iter_prev =
+                        ((struct htable_entry *) ht->table[b])->iter_prev;
+                ((struct htable_entry *) entry)->iter_next =
+                        ((struct htable_entry *) ht->table[b])->iter_next;
+        }
 
         ((struct htable_entry *) entry)->next = ht->table[b];
         ht->table[b] = entry;
+
+        if (ht->iter_head == UINT_MAX) { /* First entry */
+                ((struct htable_entry *) entry)->iter_prev = UINT_MAX;
+                ((struct htable_entry *) entry)->iter_next = UINT_MAX;
+                ht->iter_head = b;
+                ht->iter_tail = b;
+        } else {
+                if (!collision) {
+                        ((struct htable_entry *) ht->table[ht->iter_tail])->iter_next = b;
+                        ((struct htable_entry *) entry)->iter_prev = ht->iter_tail;
+                        ht->iter_tail = b;
+                }
+        }
 
         ht->count++;
         if (ht->count < ht->shrink_mark)
@@ -177,6 +201,8 @@ void *htable_remove(struct htable *ht, const void *key,
         old = *e;
         *e = old->next;
         old->next = NULL;
+
+        /* TODO: Update the iter_prev and iter_next values */
 
         ht->count--;
         if (ht->count < ht->shrink_mark)
@@ -215,4 +241,31 @@ void *htable_iter_next(struct htable_iter *iter)
 
                 current = iter->ht->table[iter->pos++];
         }
+}
+
+void htable_iter_init_ordered(struct htable *ht, struct htable_iter *iter)
+{
+        iter->ht = ht;
+        iter->pos = ht->iter_head;
+        iter->next = NULL;
+}
+
+void *htable_iter_ordered_get(struct htable_iter *iter)
+{
+        struct htable_entry *current = iter->ht->table[iter->pos];
+
+        return current;
+}
+
+void *htable_iter_next_ordered(struct htable_iter *iter)
+{
+        struct htable_entry *current = iter->ht->table[iter->pos];
+
+        if (current) {
+                iter->pos = current->iter_next;
+                return current;
+        }
+
+        if (iter->pos == iter->ht->iter_tail)
+                return NULL;
 }

@@ -7,12 +7,15 @@
 #ifndef XML2JSON_HTABLE_H
 #define XML2JSON_HTABLE_H
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define ITER_IDX_END UINT_MAX
 
 unsigned int bufhash(const void *buf, size_t len);
 
@@ -27,6 +30,7 @@ typedef int (*htable_cmp_fn)(const void *data, const void *entry1,
 struct htable_entry {
         struct htable_entry *next; /* next element in case of collision */
         unsigned int hash;
+        unsigned int iter_prev, iter_next;
 };
 
 struct htable {
@@ -40,6 +44,7 @@ struct htable {
 
         unsigned int grow_mark;
         unsigned int shrink_mark;
+        unsigned int iter_head, iter_tail;
 };
 
 extern void htable_init(struct htable *ht, htable_cmp_fn cmp_fn,
@@ -97,8 +102,12 @@ struct htable_iter {
 };
 
 extern void htable_iter_init(struct htable *ht, struct htable_iter *iter);
-
 extern void *htable_iter_next(struct htable_iter *iter);
+
+extern void htable_iter_init_ordered(struct htable *ht,
+                                     struct htable_iter *iter);
+extern void *htable_iter_ordered_get(struct htable_iter *iter);
+extern void *htable_iter_next_ordered(struct htable_iter *iter);
 
 static inline void *htable_iter_first(struct htable *ht,
                                       struct htable_iter *iter)
