@@ -2,9 +2,10 @@
  *
  * Copyright (c) 2018 Partha Susarla <mail@spartha.org>
  */
-#define _unused_          __attribute__((unused))
 
+#include "htable.h"
 #include "json.h"
+#include "util.h"
 
 #include <errno.h>
 #include <stdio.h>
