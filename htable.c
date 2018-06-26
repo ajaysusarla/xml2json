@@ -20,10 +20,10 @@
 #define HTABLE_RESIZE_THRESHOLD 80
 
 /* Private functions */
-static int default_cmp_fn(const void *data __attribute__((unused)),
-                          const void *entry1 __attribute__((unused)),
-                          const void *entry2 __attribute__((unused)),
-                          const void *kdata __attribute__((unused)))
+static int default_cmp_fn(const void *data _unused_,
+                          const void *entry1 _unused_,
+                          const void *entry2 _unused_,
+                          const void *kdata _unused_)
 {
         return 0;
 }

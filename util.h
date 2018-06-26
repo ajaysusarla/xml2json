@@ -113,6 +113,9 @@ static inline int memcmp_raw(const void *s1, size_t l1,
         return ret;
 }
 
+/* Macros for GCC attributes */
+#define _unused_          __attribute__((unused))
+
 #ifdef __cplusplus
 }
 #endif
