@@ -39,6 +39,7 @@ static void free_exh_htable_entry(struct exh_htable_entry **e)
 {
         if (e && *e) {
                 free((*e)->key);
+                (*e)->key = NULL;
                 (*e)->keylen = 0;
                 (*e)->value = NULL;
                 free(*e);
@@ -124,7 +125,6 @@ int main(int argc, char **argv)
         struct exh_htable ht;
         struct htable_iter iter;
         struct exh_htable_entry *e;
-        unsigned int i;
 
         exh_htable_init(&ht);
 
@@ -143,12 +143,15 @@ int main(int argc, char **argv)
                        e->entry.iter_next, e->key, (char *)e->value);
         }
 
-        #if 0
         htable_iter_init_ordered(&ht.table, &iter);
         while ((e = htable_iter_next_ordered(&iter))) {
                 printf("%s = %s\n", e->key, (char *)e->value);
+                if (e->entry.count > 1) {
+                        while ((e = htable_get_next(&ht.table, e))) {
+                                printf("%s = %s\n", e->key, (char *)e->value);
+                        }
+                }
         }
-        #endif
 
         exh_htable_free(&ht);
 
