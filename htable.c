@@ -166,10 +166,14 @@ void htable_put(struct htable *ht, void *entry)
                         ((struct htable_entry *) ht->table[b])->iter_prev;
                 ((struct htable_entry *) entry)->iter_next =
                         ((struct htable_entry *) ht->table[b])->iter_next;
+                ((struct htable_entry *) entry)->count =
+                        ((struct htable_entry *) ht->table[b])->count;
         }
 
         ((struct htable_entry *) entry)->next = ht->table[b];
         ht->table[b] = entry;
+
+        ((struct htable_entry *) entry)->count += 1;
 
         if (ht->iter_head == UINT_MAX) { /* First entry */
                 ((struct htable_entry *) entry)->iter_prev = UINT_MAX;
@@ -201,7 +205,7 @@ void *htable_remove(struct htable *ht, const void *key,
         old = *e;
         *e = old->next;
         old->next = NULL;
-
+        /* TODO: Update entry count */
         /* TODO: Update the iter_prev and iter_next values */
 
         ht->count--;
@@ -266,6 +270,5 @@ void *htable_iter_next_ordered(struct htable_iter *iter)
                 return current;
         }
 
-        if (iter->pos == iter->ht->iter_tail)
-                return NULL;
+        return NULL;
 }

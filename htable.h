@@ -30,6 +30,7 @@ typedef int (*htable_cmp_fn)(const void *data, const void *entry1,
 struct htable_entry {
         struct htable_entry *next; /* next element in case of collision */
         unsigned int hash;
+        unsigned int count;        /* count of members in this entry */
         unsigned int iter_prev, iter_next;
 };
 
