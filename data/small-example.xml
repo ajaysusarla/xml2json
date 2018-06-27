@@ -2,7 +2,9 @@
   <array>
     <element>one</element>
     <element>two</element>
+    <new>four</new>
     <element>three</element>
+    <insane><another>sigh</another></insane>
   </array>
   <some-data>foobar</some-data>
 </examples>
