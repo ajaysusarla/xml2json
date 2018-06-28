@@ -18,6 +18,125 @@
 
 #include <libxml/parser.h>
 #include <libxml/chvalid.h>
+#include <libxml/xpath.h>
+
+/**
+ * Hashtable
+ */
+struct exh_htable {
+        struct htable table;
+};
+
+struct exh_htable_entry {
+        struct htable_entry entry;
+        unsigned char *key;
+        size_t keylen;
+        void *value;
+};
+
+static struct exh_htable_entry *alloc_exh_htable_entry(unsigned char *key,
+                                                       size_t keylen,
+                                                       void *value)
+{
+        struct exh_htable_entry *e;
+
+        e = xmalloc(sizeof(struct exh_htable_entry));
+        e->key = xmalloc(sizeof(unsigned char) * keylen);
+        memcpy(e->key, key, keylen);
+        e->keylen = keylen;
+        e->value = value;
+
+        return e;
+}
+
+static void free_exh_htable_entry(struct exh_htable_entry **e)
+{
+        if (e && *e) {
+                free((*e)->key);
+                (*e)->key = NULL;
+                (*e)->keylen = 0;
+                (*e)->value = NULL;
+                free(*e);
+                *e = NULL;
+        }
+}
+
+static int exh_htable_entry_cmpfn(const void *unused1 __attribute__((unused)),
+                                  const void *entry1,
+                                  const void *entry2,
+                                  const void *unused2 __attribute__((unused)))
+{
+        const struct exh_htable_entry *e1 = entry1;
+        const struct exh_htable_entry *e2 = entry2;
+
+        return memcmp_raw(e1->key, e1->keylen, e2->key, e2->keylen);
+}
+
+static void exh_htable_init(struct exh_htable *ht)
+{
+        htable_init(&ht->table, exh_htable_entry_cmpfn, NULL, 0);
+}
+
+static void *exh_htable_get(struct exh_htable *ht, unsigned char *key,
+                            size_t keylen)
+{
+        struct exh_htable_entry k;
+        struct exh_htable_entry *e;
+
+        if (!ht->table.size)
+                exh_htable_init(ht);
+
+        htable_entry_init(&k, bufhash(key, keylen));
+        k.key = (unsigned char *)key;
+        k.keylen = keylen;
+        e = htable_get(&ht->table, &k, NULL);
+
+        return e ? e : NULL;
+}
+
+static void exh_htable_put(struct exh_htable *ht, unsigned char *key,
+                           size_t keylen, void *value)
+{
+        struct exh_htable_entry *e;
+
+        if (!ht->table.size)
+                exh_htable_init(ht);
+
+        e = alloc_exh_htable_entry(key, keylen, value);
+        htable_entry_init(e, bufhash(key, keylen));
+
+        htable_put(&ht->table, e);
+}
+
+static void *exh_htable_remove(struct exh_htable *ht, unsigned char *key,
+                               size_t keylen)
+{
+        struct exh_htable_entry e;
+
+        if (!ht->table.size)
+                exh_htable_init(ht);
+
+        htable_entry_init(&e, bufhash(key, keylen));
+
+        return htable_remove(&ht->table, &e, key);
+}
+
+static void exh_htable_free(struct exh_htable *ht)
+{
+        struct htable_iter iter;
+        struct exh_htable_entry *e;
+
+        htable_iter_init(&ht->table, &iter);
+        while ((e = htable_iter_next(&iter))) {
+                free_exh_htable_entry(&e);
+        }
+
+        htable_free(&ht->table, 0);
+}
+
+/**
+ * XML parsing
+ */
 
 #define INDENT_SIZE 101
 
@@ -30,6 +149,7 @@ struct _xml2jsonCtxt {
         xmlDocPtr doc;
         xmlNodePtr node;
         xmlDictPtr dict;
+        xmlXPathContextPtr pctxt;
         int options;
 };
 
@@ -107,49 +227,87 @@ static void xml2jsonCtxtParseOneNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
 
         switch(node->type) {
         case XML_ELEMENT_NODE:
-                xml2jsonPrintSpaces(ctxt);
+                /* xml2jsonPrintSpaces(ctxt); */
                 if ((node->ns != NULL) && (node->ns->prefix != NULL))  {
+                        xml2jsonPrintString(ctxt, node->ns->prefix);
                         fprintf(ctxt->output, ":");
                 }
+                fprintf(ctxt->output, "EN: ");
                 xml2jsonPrintString(ctxt, node->name);
                 fprintf(ctxt->output, "\n");
                 break;
         case XML_ATTRIBUTE_NODE:
+                fprintf(ctxt->output, "AN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_TEXT_NODE:
+                fprintf(ctxt->output, "TN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_CDATA_SECTION_NODE:
+                fprintf(ctxt->output, "CSN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_ENTITY_REF_NODE:
+                fprintf(ctxt->output, "ERN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_ENTITY_NODE:
+                fprintf(ctxt->output, "ENN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_PI_NODE:
+                fprintf(ctxt->output, "PIN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_COMMENT_NODE:
+                fprintf(ctxt->output, "CON: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_DOCUMENT_NODE:
         case XML_HTML_DOCUMENT_NODE:
+                fprintf(ctxt->output, "DOCN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_DOCUMENT_TYPE_NODE:
+                fprintf(ctxt->output, "DTN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_DOCUMENT_FRAG_NODE:
+                fprintf(ctxt->output, "DFN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_NOTATION_NODE:
+                fprintf(ctxt->output, "NN: ");
+                fprintf(ctxt->output, "\n");
                 break;
         case XML_DTD_NODE:
+                fprintf(ctxt->output, "DTDN: ");
+                fprintf(ctxt->output, "\n");
                 return;
         case XML_ELEMENT_DECL:
+                fprintf(ctxt->output, "ELDECL: ");
+                fprintf(ctxt->output, "\n");
                 return;
         case XML_ATTRIBUTE_DECL:
+                fprintf(ctxt->output, "ADECL: ");
+                fprintf(ctxt->output, "\n");
                 return;
         case XML_ENTITY_DECL:
+                fprintf(ctxt->output, "ENDECL: ");
+                fprintf(ctxt->output, "\n");
                 return;
         case XML_NAMESPACE_DECL:
+                fprintf(ctxt->output, "NDECL: ");
+                fprintf(ctxt->output, "\n");
                 return;
         case XML_XINCLUDE_START:
+                fprintf(ctxt->output, "XIS: ");
+                fprintf(ctxt->output, "\n");
                 return;
         case XML_XINCLUDE_END:
+                fprintf(ctxt->output, "XIE: ");
+                fprintf(ctxt->output, "\n");
                 return;
         default:
                 fprintf(stderr, "Unknown node type %d\n", node->type);
@@ -157,6 +315,7 @@ static void xml2jsonCtxtParseOneNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
         } /* switch() */
 
         ctxt->depth++;
+        fprintf(ctxt->output, ">>> %d\n", ctxt->depth);
 
         if ((node->type == XML_ELEMENT_NODE) && (node->nsDef != NULL))
                 xml2jsonPrintNameSpaceList(ctxt, node->nsDef);
@@ -167,7 +326,8 @@ static void xml2jsonCtxtParseOneNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
         if (node->type != XML_ENTITY_REF_NODE) {
                 if ((node->type != XML_ELEMENT_NODE) &&
                     (node->content != NULL)) {
-                        xml2jsonPrintSpaces(ctxt);
+                        /* xml2jsonPrintSpaces(ctxt); */
+                        fprintf(ctxt->output, "CONTENT: ");
                         xml2jsonPrintString(ctxt, node->content);
                         fprintf(ctxt->output, "\n");
                 }
@@ -180,7 +340,7 @@ static void xml2jsonCtxtParseOneNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
         }
 
         ctxt->depth--;
-
+        fprintf(ctxt->output, ">>> %d\n", ctxt->depth);
 }
 
 static void xml2jsonCtxtParseNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
@@ -194,8 +354,10 @@ static void xml2jsonCtxtParseNode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
             (node->children != NULL) &&
             (node->type != XML_ENTITY_REF_NODE)) {
                 ctxt->depth++;
-                xml2jsonCtxtParseNodeList(ctxt, node);
+                fprintf(ctxt->output, ">> %d\n", ctxt->depth);
+                xml2jsonCtxtParseNodeList(ctxt, node->children);
                 ctxt->depth--;
+                fprintf(ctxt->output, "<< %d\n", ctxt->depth);
         }
 }
 
@@ -212,11 +374,24 @@ static void xml2jsonCtxtParse(xml2jsonCtxtPtr ctxt, xmlDocPtr doc)
         if (doc == NULL)
                 return;
 
+        ctxt->doc = doc;
+
+        ctxt->pctxt = xmlXPathNewContext(ctxt->doc);
+        if (ctxt->pctxt == NULL) {
+                xmlFree(ctxt);
+                return;
+        }
+
+        /* XXX: JSON ROOT HERE */
         if ((doc->type == XML_DOCUMENT_NODE) && (doc->children != NULL)) {
                 ctxt->depth++;
+                fprintf(ctxt->output, "> %d\n", ctxt->depth);
                 xml2jsonCtxtParseNodeList(ctxt, doc->children);
                 ctxt->depth--;
+                fprintf(ctxt->output, "> %d\n", ctxt->depth);
         }
+
+        xmlXPathFreeContext(ctxt->pctxt);
 }
 
 static void to_json(xmlDocPtr doc)
@@ -226,6 +401,112 @@ static void to_json(xmlDocPtr doc)
         xml2jsonInitCtxt(&ctxt);
 
         xml2jsonCtxtParse(&ctxt, doc);
+
+        xml2jsonCleanCtxt(&ctxt);
+}
+
+static void parse_xmlnode(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
+{
+        fprintf(stderr, "Parsing node [%d] : ", node->type);
+        switch (node->type) {
+        case XML_ELEMENT_NODE:
+                xml2jsonPrintString(ctxt, node->name);
+                fprintf(ctxt->output, "\n");
+                break;
+        default:
+                break;
+        }
+
+        if (node->type != XML_ENTITY_REF_NODE) {
+                if ((node->type != XML_ELEMENT_NODE) &&
+                    (node->content != NULL) &&
+                    (xmlStrlen(node->content))) {
+                        /* xml2jsonPrintSpaces(ctxt); */
+                        xml2jsonPrintString(ctxt, node->content);
+                        fprintf(ctxt->output, ":%d:\n", xmlStrlen(node->content));
+                }
+        }
+}
+
+static void parse_xmlnode_children(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
+{
+        xmlNodePtr tmp;
+        int i;
+        int level = 0;
+
+        if (node == NULL)
+                return;
+
+        ctxt->depth++;
+        printf("\t\t [%d] New HTABLE!\n", ctxt->depth);
+        for (tmp = node; tmp; tmp = tmp->next) {
+                int print = 0;
+                if (tmp->type == XML_ELEMENT_NODE) {
+                        printf("[%d][%d]", ctxt->depth, level);
+                        for (i = 0; i < ctxt->depth; i++)
+                                printf(" ");
+
+                        printf("%s ", tmp->name);
+                        print = 1;
+                        level++;
+                }
+
+                if (tmp->type == XML_TEXT_NODE) {
+                        xmlChar *s = xmlNodeGetContent(tmp);
+                        int len = xmlStrlen(s), t;
+                        t = 0;
+                        for (t = 0; t < len; t++) {
+                                if ((s[t] == 0x20) ||
+                                    ((0x9 <= s[t]) && (s[t] <= 0xa)) ||
+                                    (s[t] == 0xd) ||
+                                    (s[t] == '\r') ||
+                                    (s[t] == '\n') ||
+                                    (s[t] == 0x0a))
+                                        continue;
+                                else {
+                                        printf("%c", s[t]);
+                                        print = 1;
+                                }
+                        }
+                        xmlFree(s);
+                }
+
+                if (print == 1)
+                        printf("\n");
+
+                parse_xmlnode_children(ctxt, tmp->children);
+        }
+        printf("\t\t [%d] Delete HTABLE!\n", ctxt->depth);
+        ctxt->depth--;
+}
+
+static void xml2json_ctx_parse(xml2jsonCtxtPtr ctxt, xmlDocPtr doc)
+{
+        if (doc == NULL)
+                return;
+
+        ctxt->doc = doc;
+
+        ctxt->pctxt = xmlXPathNewContext(ctxt->doc);
+        if (ctxt->pctxt == NULL) {
+                xmlFree(ctxt);
+                return;
+        }
+
+        if ((doc->type == XML_DOCUMENT_NODE) && (doc->children != NULL)) {
+                parse_xmlnode_children(ctxt, doc->children);
+        }
+
+        xmlXPathFreeContext(ctxt->pctxt);
+}
+
+static void parse_xml_tree(xmlDocPtr doc)
+{
+        xml2jsonCtxt ctxt;
+
+        xml2jsonInitCtxt(&ctxt);
+
+        xml2json_ctx_parse(&ctxt, doc);
 
         xml2jsonCleanCtxt(&ctxt);
 }
@@ -269,7 +550,8 @@ int main(int argc, char **argv)
         munmap((char *)base, sbinfo.st_size);
         close(fd);
 
-        to_json(doc);
+        /* to_json(doc); */
+        parse_xml_tree(doc);
 
         xmlFreeDoc(doc);
 
