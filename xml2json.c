@@ -23,24 +23,24 @@
 /**
  * Hashtable
  */
-struct exh_htable {
+struct xml_htable {
         struct htable table;
 };
 
-struct exh_htable_entry {
+struct xml_htable_entry {
         struct htable_entry entry;
         unsigned char *key;
         size_t keylen;
         void *value;
 };
 
-static struct exh_htable_entry *alloc_exh_htable_entry(unsigned char *key,
+static struct xml_htable_entry *alloc_xml_htable_entry(unsigned char *key,
                                                        size_t keylen,
                                                        void *value)
 {
-        struct exh_htable_entry *e;
+        struct xml_htable_entry *e;
 
-        e = xmalloc(sizeof(struct exh_htable_entry));
+        e = xmalloc(sizeof(struct xml_htable_entry));
         e->key = xmalloc(sizeof(unsigned char) * keylen);
         memcpy(e->key, key, keylen);
         e->keylen = keylen;
@@ -49,7 +49,7 @@ static struct exh_htable_entry *alloc_exh_htable_entry(unsigned char *key,
         return e;
 }
 
-static void free_exh_htable_entry(struct exh_htable_entry **e)
+static void free_xml_htable_entry(struct xml_htable_entry **e)
 {
         if (e && *e) {
                 free((*e)->key);
@@ -61,30 +61,30 @@ static void free_exh_htable_entry(struct exh_htable_entry **e)
         }
 }
 
-static int exh_htable_entry_cmpfn(const void *unused1 __attribute__((unused)),
+static int xml_htable_entry_cmpfn(const void *unused1 _unused_,
                                   const void *entry1,
                                   const void *entry2,
-                                  const void *unused2 __attribute__((unused)))
+                                  const void *unused2 _unused_)
 {
-        const struct exh_htable_entry *e1 = entry1;
-        const struct exh_htable_entry *e2 = entry2;
+        const struct xml_htable_entry *e1 = entry1;
+        const struct xml_htable_entry *e2 = entry2;
 
         return memcmp_raw(e1->key, e1->keylen, e2->key, e2->keylen);
 }
 
-static void exh_htable_init(struct exh_htable *ht)
+static void xml_htable_init(struct xml_htable *ht)
 {
-        htable_init(&ht->table, exh_htable_entry_cmpfn, NULL, 0);
+        htable_init(&ht->table, xml_htable_entry_cmpfn, NULL, 0);
 }
 
-static void *exh_htable_get(struct exh_htable *ht, unsigned char *key,
+static void *xml_htable_get(struct xml_htable *ht, unsigned char *key,
                             size_t keylen)
 {
-        struct exh_htable_entry k;
-        struct exh_htable_entry *e;
+        struct xml_htable_entry k;
+        struct xml_htable_entry *e;
 
         if (!ht->table.size)
-                exh_htable_init(ht);
+                xml_htable_init(ht);
 
         htable_entry_init(&k, bufhash(key, keylen));
         k.key = (unsigned char *)key;
@@ -94,41 +94,41 @@ static void *exh_htable_get(struct exh_htable *ht, unsigned char *key,
         return e ? e : NULL;
 }
 
-static void exh_htable_put(struct exh_htable *ht, unsigned char *key,
+static void xml_htable_put(struct xml_htable *ht, unsigned char *key,
                            size_t keylen, void *value)
 {
-        struct exh_htable_entry *e;
+        struct xml_htable_entry *e;
 
         if (!ht->table.size)
-                exh_htable_init(ht);
+                xml_htable_init(ht);
 
-        e = alloc_exh_htable_entry(key, keylen, value);
+        e = alloc_xml_htable_entry(key, keylen, value);
         htable_entry_init(e, bufhash(key, keylen));
 
         htable_put(&ht->table, e);
 }
 
-static void *exh_htable_remove(struct exh_htable *ht, unsigned char *key,
+static void *xml_htable_remove(struct xml_htable *ht, unsigned char *key,
                                size_t keylen)
 {
-        struct exh_htable_entry e;
+        struct xml_htable_entry e;
 
         if (!ht->table.size)
-                exh_htable_init(ht);
+                xml_htable_init(ht);
 
         htable_entry_init(&e, bufhash(key, keylen));
 
         return htable_remove(&ht->table, &e, key);
 }
 
-static void exh_htable_free(struct exh_htable *ht)
+static void xml_htable_free(struct xml_htable *ht)
 {
         struct htable_iter iter;
-        struct exh_htable_entry *e;
+        struct xml_htable_entry *e;
 
         htable_iter_init(&ht->table, &iter);
         while ((e = htable_iter_next(&iter))) {
-                free_exh_htable_entry(&e);
+                free_xml_htable_entry(&e);
         }
 
         htable_free(&ht->table, 0);
@@ -146,6 +146,7 @@ struct _xml2jsonCtxt {
         FILE *output;
         char indent[INDENT_SIZE];
         int depth;
+        int level;
         xmlDocPtr doc;
         xmlNodePtr node;
         xmlDictPtr dict;
@@ -160,6 +161,7 @@ static void xml2jsonInitCtxt(xml2jsonCtxtPtr ctxt)
         int i;
         ctxt->output = stdout;
         ctxt->depth = 0;
+        ctxt->level = 0;
         ctxt->doc = NULL;
         ctxt->node = NULL;
         ctxt->dict = NULL;
@@ -432,29 +434,32 @@ static void parse_xmlnode_children(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
 {
         xmlNodePtr tmp;
         int i;
-        int level = 0;
+        struct xml_htable ht;
+        struct htable_iter iter;
 
         if (node == NULL)
                 return;
 
-        ctxt->depth++;
-        printf("\t\t [%d] New HTABLE!\n", ctxt->depth);
+        xml_htable_init(&ht);
         for (tmp = node; tmp; tmp = tmp->next) {
                 int print = 0;
+                ctxt->level++;
                 if (tmp->type == XML_ELEMENT_NODE) {
-                        printf("[%d][%d]", ctxt->depth, level);
+                        printf("[%d][%d]", ctxt->depth, ctxt->level);
                         for (i = 0; i < ctxt->depth; i++)
                                 printf(" ");
 
                         printf("%s ", tmp->name);
                         print = 1;
-                        level++;
                 }
 
                 if (tmp->type == XML_TEXT_NODE) {
                         xmlChar *s = xmlNodeGetContent(tmp);
                         int len = xmlStrlen(s), t;
                         t = 0;
+                        printf("[%d][%d]", ctxt->depth, ctxt->level);
+                        for (i = 0; i < ctxt->depth; i++)
+                                printf(" ");
                         for (t = 0; t < len; t++) {
                                 if ((s[t] == 0x20) ||
                                     ((0x9 <= s[t]) && (s[t] <= 0xa)) ||
@@ -474,10 +479,14 @@ static void parse_xmlnode_children(xml2jsonCtxtPtr ctxt, xmlNodePtr node)
                 if (print == 1)
                         printf("\n");
 
+                ctxt->depth++;
+                printf("\t\t [%d] New HTABLE!\n", ctxt->depth);
                 parse_xmlnode_children(ctxt, tmp->children);
+                ctxt->level--;
         }
         printf("\t\t [%d] Delete HTABLE!\n", ctxt->depth);
         ctxt->depth--;
+        xml_htable_free(&ht);
 }
 
 static void xml2json_ctx_parse(xml2jsonCtxtPtr ctxt, xmlDocPtr doc)
