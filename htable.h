@@ -60,6 +60,9 @@ static inline void htable_entry_init(void *entry, unsigned int hash)
         struct htable_entry *e = entry;
         e->hash = hash;
         e->next = NULL;
+        e->count = 0;
+        e->iter_prev = 0;
+        e->iter_next = 0;
 }
 
 /* htable_get():

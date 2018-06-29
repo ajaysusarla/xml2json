@@ -26,7 +26,7 @@ LIBOBJS = \
 	util.o \
 	xml2json.o
 
-all: clean xml2json exh
+all: clean xml2json
 
 Makefile.dep:
 	gcc -MM *.c > Makefile.dep 2> /dev/null || true
