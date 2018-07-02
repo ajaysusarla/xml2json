@@ -39,10 +39,6 @@ Makefile.dep:
 xml2json: $(LIBOBJS)
 	gcc $(LIBXML_LIBS) -o xml2json $(LIBOBJS)
 
-exh: htable.o util.o
-	gcc $(CFLAGS) -c exh.c
-	gcc -o exh htable.o util.o exh.o
-
 check-syntax:
 	gcc $(CFLAGS) -Wextra -pedantic -fsyntax-only $(CHK_SOURCES)
 
