@@ -67,6 +67,10 @@ static void free_xml_htable_entry(struct xml_htable_entry **e)
                 free((*e)->key);
                 (*e)->key = NULL;
                 (*e)->keylen = 0;
+                if ((*e)->type == ENTRY_TYPE_STRING) {
+                        free((*e)->value);
+                }
+
                 (*e)->value = NULL;
                 free(*e);
                 *e = NULL;
@@ -528,7 +532,7 @@ static void xml2json_ctx_parse(xml2jsonCtxtPtr ctxt, xmlDocPtr doc)
 
         if ((doc->type == XML_DOCUMENT_NODE) && (doc->children != NULL)) {
                 data = parse_xmlnode_children(ctxt, doc->children, &type);
-                printf("--- %s ---\n", json_encode((JsonObject *)data));
+                printf("%s\n", json_encode((JsonObject *)data));
                 json_free(data);
         }
 
@@ -589,7 +593,7 @@ int main(int argc, char **argv)
         parse_xml_tree(doc);
 
         xmlFreeDoc(doc);
-
+        #if 0
         {
                 JsonObject *array;
                 JsonObject *children[5 + 1];
@@ -612,6 +616,7 @@ int main(int argc, char **argv)
                 printf(">> %s\n", json_encode(jsondoc));
                 json_free(jsondoc);
         }
+        #endif
 
         exit(EXIT_SUCCESS);
 }
