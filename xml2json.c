@@ -426,10 +426,16 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
                         else if (e->type == ENTRY_TYPE_STRING)
                                 json_prepend_to_array(array,
                                                       json_string_obj(e->value));
+                        else
+                                json_prepend_to_array(array, e->value);
 
                         while ((temp = htable_get_next(&ht.table, temp))) {
-                                json_prepend_to_array(array,
-                                                      temp->value ? json_string_obj(temp->value) : json_null_obj());
+                                if (temp->type == ENTRY_TYPE_NULL)
+                                        json_prepend_to_array(array, json_null_obj());
+                                if (temp->type == ENTRY_TYPE_STRING)
+                                        json_prepend_to_array(array, json_string_obj(temp->value));
+                                if (temp->type == ENTRY_TYPE_OBJECT)
+                                        json_prepend_to_array(array, temp->value);
                         }
                         json_append_member(jobj, (const char *)e->key, array);
                 } else {        /* normal(?) object */
