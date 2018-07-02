@@ -372,6 +372,7 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
         for (tmp = node; tmp; tmp = tmp->next) {
                 if (tmp->type == XML_ELEMENT_NODE) {
                         void *val;
+                        int has_attr = 0;
 
                         if (tmp->properties != NULL) {
                                 /* We have some XML attributes that need to
@@ -384,16 +385,22 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
 
                                         val = parse_xmlnode_children(ctxt, attr->children, type);
                                         strobj = json_string_obj(val);
-                                        json_prepend_member(attrobj, (char *)attr->name, strobj);
+                                        /* TODO: prepend @ to attr->name */
+                                        json_append_member(attrobj, (char *)attr->name, strobj);
                                         attr = attr->next;
                                 }
+
                                 *type = ENTRY_TYPE_OBJECT;
                                 xml_htable_put(&ht, (char *)tmp->name,
                                                xmlStrlen(tmp->name),
                                                attrobj, *type);
+                                has_attr = 1;
                         }
 
                         val = parse_xmlnode_children(ctxt, tmp->children, type);
+                        if (has_attr && *type == ENTRY_TYPE_NULL)
+                                continue;
+
                         xml_htable_put(&ht, (char *)tmp->name,
                                        xmlStrlen(tmp->name),
                                        val, *type);
