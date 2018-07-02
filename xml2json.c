@@ -372,12 +372,33 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
         for (tmp = node; tmp; tmp = tmp->next) {
                 if (tmp->type == XML_ELEMENT_NODE) {
                         void *val;
+
+                        if (tmp->properties != NULL) {
+                                /* We have some XML attributes that need to
+                                   be taken care of */
+                                xmlAttrPtr attr = tmp->properties;
+                                JsonObject *attrobj = json_new();
+
+                                while (attr != NULL) {
+                                        JsonObject *strobj;
+
+                                        val = parse_xmlnode_children(ctxt, attr->children, type);
+                                        strobj = json_string_obj(val);
+                                        json_prepend_member(attrobj, (char *)attr->name, strobj);
+                                        attr = attr->next;
+                                }
+                                *type = ENTRY_TYPE_OBJECT;
+                                xml_htable_put(&ht, (char *)tmp->name,
+                                               xmlStrlen(tmp->name),
+                                               attrobj, *type);
+                        }
+
                         val = parse_xmlnode_children(ctxt, tmp->children, type);
                         xml_htable_put(&ht, (char *)tmp->name,
                                        xmlStrlen(tmp->name),
                                        val, *type);
                 }
-                if (tmp->type == XML_TEXT_NODE) {
+                if (tmp->type == XML_TEXT_NODE && tmp->content != NULL) {
                         xmlChar *s = xmlNodeGetContent(tmp);
                         int len = xmlStrlen(s), t, spaces;
                         spaces = len;
@@ -401,13 +422,10 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
                                 xmlFree(s);
                                 continue;
                         }
-                        /* XXX: Find the correct type here */
                         if (s) *type = ENTRY_TYPE_STRING;
                         else *type = ENTRY_TYPE_NULL;
+                        xml_htable_free(&ht);
                         return s;
-                }
-                if (tmp->type == XML_ATTRIBUTE_NODE) {
-                        printf("Atribute!\n");
                 }
         }
 
