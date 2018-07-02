@@ -42,7 +42,7 @@ struct _JsonObject {
         };
 };
 
-extern const char *json_encode(JsonObject *obj);
+extern char *json_encode(JsonObject *obj);
 
 extern JsonObject *json_null_obj(void);
 extern JsonObject *json_bool_obj(bool b);

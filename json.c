@@ -99,7 +99,7 @@ static void parse_json_object(JsonObject *object, cstring *str)
         }
 }
 
-static const char *json_object_to_string(JsonObject *object)
+static char *json_object_to_string(JsonObject *object)
 {
         cstring jsonstr;
         size_t len = 0;
@@ -203,7 +203,7 @@ static void prepend_object(JsonObject *parent, JsonObject *child)
  * Public Functions
  */
 
-const char *json_encode(JsonObject *obj)
+char *json_encode(JsonObject *obj)
 {
         return json_object_to_string(obj);
 }
