@@ -3,6 +3,7 @@
  * Copyright (c) 2018 Partha Susarla <mail@spartha.org>
  */
 
+#include "cstring.h"
 #include "htable.h"
 #include "json.h"
 #include "util.h"
@@ -382,12 +383,19 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
 
                                 while (attr != NULL) {
                                         JsonObject *strobj;
+                                        cstring s;
+
+                                        /* Append '@' to the attribute name */
+                                        cstring_init(&s, 0);
+                                        cstring_addch(&s, '@');
+                                        cstring_addstr(&s, (char *)attr->name);
 
                                         val = parse_xmlnode_children(ctxt, attr->children, type);
                                         strobj = json_string_obj(val);
-                                        /* TODO: prepend @ to attr->name */
-                                        json_append_member(attrobj, (char *)attr->name, strobj);
+                                        json_append_member(attrobj, s.buf, strobj);
                                         attr = attr->next;
+
+                                        cstring_release(&s);
                                 }
 
                                 *type = ENTRY_TYPE_OBJECT;
