@@ -43,6 +43,6 @@ check-syntax:
 	gcc $(CFLAGS) -Wextra -pedantic -fsyntax-only $(CHK_SOURCES)
 
 clean:
-	rm -f *.o Makefile.dep xml2json exh
+	rm -f *.o Makefile.dep xml2json
 
 .PHONY: all clean check-syntax
