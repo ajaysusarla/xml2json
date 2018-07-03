@@ -155,211 +155,242 @@ static void xml_htable_free(struct xml_htable *ht)
 /**
  * XML parsing
  */
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type);
 
-typedef struct _xml2jsonCtxt xml2jsonCtxt;
-typedef xml2jsonCtxt *xml2jsonCtxtPtr;
-struct _xml2jsonCtxt {
-        FILE *output;
-        int depth;
-        int level;
-        xmlDocPtr doc;
-        xmlNodePtr node;
-        xmlDictPtr dict;
-        int options;
-};
-
-static void xml2json_init_ctxt(xml2jsonCtxtPtr ctxt)
+static void *parse_xml_element_attributes(xmlAttrPtr attr,
+                                          enum xml_entry_type *type)
 {
-        ctxt->output = stdout;
-        ctxt->depth = 0;
-        ctxt->level = 0;
-        ctxt->doc = NULL;
-        ctxt->node = NULL;
-        ctxt->dict = NULL;
-        ctxt->options = 0;
-}
+        JsonObject *attrobj = NULL;
 
-static void xml2json_clean_ctxt(xml2jsonCtxtPtr ctxt _unused_)
-{
-}
-
-
-static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
-                                    xmlNodePtr node,
-                                    enum xml_entry_type *type)
-{
-        xmlNodePtr tmp;
-        struct xml_htable ht;
-        struct htable_iter iter;
-        struct xml_htable_entry *e;
-        JsonObject *jobj = NULL;
-
-        if (node == NULL) {
+        if (attr == NULL) {
                 *type = ENTRY_TYPE_NULL;
                 return NULL;
         }
 
-        xml_htable_init(&ht);
-        ctxt->depth++;
-        for (tmp = node; tmp; tmp = tmp->next) {
-                if (node->type == XML_ENTITY_REF_NODE)
-                        continue;
+        attrobj = json_new();
 
-                if (tmp->type == XML_ELEMENT_NODE) {
-                        void *val;
-                        int has_attr = 0;
+        while (attr != NULL) {
+                cstring str;
+                void *val;
 
-                        if (tmp->properties != NULL) {
-                                /* We have some XML attributes that need to
-                                   be taken care of */
-                                xmlAttrPtr attr = tmp->properties;
-                                JsonObject *attrobj = json_new();
+                /* Append '@' to the attribute name */
+                cstring_init(&str, 0);
+                cstring_addch(&str, '@');
+                cstring_addstr(&str, (char *)attr->name);
 
-                                while (attr != NULL) {
-                                        JsonObject *strobj;
-                                        cstring s;
+                val = parse_xmlnode(attr->children, type);
 
-                                        /* Append '@' to the attribute name */
-                                        cstring_init(&s, 0);
-                                        cstring_addch(&s, '@');
-                                        cstring_addstr(&s, (char *)attr->name);
-
-                                        val = parse_xmlnode_children(ctxt, attr->children, type);
-                                        strobj = json_string_obj(val);
-                                        json_append_member(attrobj, s.buf, strobj);
-                                        attr = attr->next;
-
-                                        cstring_release(&s);
-                                }
-
-                                *type = ENTRY_TYPE_OBJECT;
-                                xml_htable_put(&ht, (char *)tmp->name,
-                                               xmlStrlen(tmp->name),
-                                               attrobj, *type);
-                                has_attr = 1;
-                        }
-
-                        val = parse_xmlnode_children(ctxt, tmp->children, type);
-                        if (has_attr && *type == ENTRY_TYPE_NULL)
-                                continue;
-
-                        xml_htable_put(&ht, (char *)tmp->name,
-                                       xmlStrlen(tmp->name),
-                                       val, *type);
+                if (*type == ENTRY_TYPE_STRING) {
+                        JsonObject *strobj;
+                        strobj = json_string_obj(val);
+                        free(val);
+                        json_append_member(attrobj, str.buf, strobj);
+                } else {
+                        printf("attributes: non string type entry!\n");
                 }
-                if (tmp->type == XML_TEXT_NODE && tmp->content != NULL) {
-                        xmlChar *s = xmlNodeGetContent(tmp);
-                        cstring xstr;
-                        int len = xmlStrlen(s), t;
-                        size_t xlen = 0;
 
-                        cstring_init(&xstr, 0);
-                        /* Check if the string is just empty spaces
-                         * in which case we just ignore it.
-                         */
-                        for (t = 0; t < len; t++) {
-                                if ((s[t] == 0x20) ||
-                                    ((0x9 <= s[t]) && (s[t] <= 0xa)) ||
-                                    (s[t] == 0xd) ||
-                                    (s[t] == '\r') ||
-                                    (s[t] == '\n') ||
-                                    (s[t] == 0x0a)) {
-                                        continue;
-                                }
-                                cstring_addch(&xstr, s[t]);
-                        }
+                attr = attr->next;
 
-                        xmlFree(s);
-
-                        if (xstr.len == 0) {
-                                cstring_release(&xstr);
-                                continue;
-                        }
-
-                        if (s) *type = ENTRY_TYPE_STRING;
-                        else *type = ENTRY_TYPE_NULL;
-
-                        xml_htable_free(&ht);
-                        return cstring_detach(&xstr, &xlen);
-                }
+                cstring_release(&str);
         }
+
+        *type = ENTRY_TYPE_OBJECT;
+        return attrobj;
+}
+
+static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
+                                    enum xml_entry_type *type)
+{
+        void *val = NULL;
+        int has_attr = 0;
+
+        if (node == NULL) {
+                *type = ENTRY_TYPE_NULL;
+                return -1;
+        }
+
+        if (node->properties != NULL) {
+                void *attrval = NULL;
+                /* We need to parse XML attributes */
+                attrval = parse_xml_element_attributes(node->properties, type);
+
+                xml_htable_put(ht, (char *)node->name, xmlStrlen(node->name),
+                               attrval, *type);
+                has_attr = 1;
+        }
+
+        val = parse_xmlnode(node->children, type);
+        if (has_attr && *type == ENTRY_TYPE_NULL) {
+                if (val) free(val);
+                return has_attr;
+        }
+
+        xml_htable_put(ht, (char *)node->name, xmlStrlen(node->name),
+                       val, *type);
+
+        return has_attr;
+}
+
+static char *parse_xml_text_node(xmlNodePtr node, enum xml_entry_type *type,
+                                 size_t *slen)
+{
+        xmlChar *content;
+        cstring str;
+        size_t len = 0, i = 0;
+
+        if (node->content == NULL)
+                return NULL;
+
+        cstring_init(&str, 0);
+
+        content = xmlNodeGetContent(node);
+        len = xmlStrlen(content);
+
+        for (i = 0; i < len; i++) {
+                if ((content[i] == 0x20) ||
+                    ((0x9 <= content[i]) && (content[i] <= 0xa)) ||
+                    (content[i] == 0xd) ||
+                    (content[i] == '\r') ||
+                    (content[i] == '\n') ||
+                    (content[i] == 0x0a)) {
+                        continue;
+                }
+                cstring_addch(&str, content[i]);
+        }
+
+        if (!content) *type = ENTRY_TYPE_NULL;
+
+        xmlFree(content);
+
+        if (str.len == 0) {
+                *type = ENTRY_TYPE_NULL;
+                cstring_release(&str);
+        } else {
+                *type = ENTRY_TYPE_STRING;
+        }
+
+        return cstring_detach(&str, slen);
+}
+
+static JsonObject *xml_htable_to_json_obj(struct xml_htable *ht)
+{
+        JsonObject *jobj;
+        struct htable_iter iter;
+        struct xml_htable_entry *e = NULL;
 
         jobj = json_new();
 
-        htable_iter_init_ordered(&ht.table, &iter);
+        htable_iter_init_ordered(&ht->table, &iter);
+
         while ((e = htable_iter_next_ordered(&iter))) {
                 if (e->entry.count > 1) { /* Array */
                         JsonObject *array;
                         struct xml_htable_entry *temp = NULL;
-                        array = json_array_obj();
                         temp = e;
+
+                        array = json_array_obj();
+
                         if (e->type == ENTRY_TYPE_NULL)
-                                json_prepend_to_array(array,
-                                                      json_null_obj());
+                                json_prepend_to_array(array, json_null_obj());
                         else if (e->type == ENTRY_TYPE_STRING)
                                 json_prepend_to_array(array,
                                                       json_string_obj(e->value));
                         else
                                 json_prepend_to_array(array, e->value);
 
-                        while ((temp = htable_get_next(&ht.table, temp))) {
+
+                        /* Parse the other entries for the same key */
+                        while ((temp = htable_get_next(&ht->table, temp))) {
                                 if (temp->type == ENTRY_TYPE_NULL)
-                                        json_prepend_to_array(array, json_null_obj());
+                                        json_prepend_to_array(array,
+                                                              json_null_obj());
                                 else if (temp->type == ENTRY_TYPE_STRING)
-                                        json_prepend_to_array(array, json_string_obj(temp->value));
-                                else if (temp->type == ENTRY_TYPE_OBJECT)
+                                        json_prepend_to_array(array,
+                                                              json_string_obj(temp->value));
+                                else
                                         json_prepend_to_array(array, temp->value);
                         }
-                        json_append_member(jobj, (const char *)e->key, array);
-                } else {        /* normal(?) object */
-                        if (e->type == ENTRY_TYPE_NULL) {
-                                JsonObject *nullobj = json_null_obj();
-                                json_append_member(jobj, e->key, nullobj);
-                        } else if (e->type == ENTRY_TYPE_STRING) {
-                                JsonObject *strobj;
-                                strobj = json_string_obj(e->value);
-                                json_append_member(jobj, e->key, strobj);
-                        } else {
+
+                        json_append_member(jobj, (char *)e->key, array);
+
+                } else {                  /* Normal(?) non-array object */
+                        if (e->type == ENTRY_TYPE_NULL)
+                                json_append_member(jobj, e->key,
+                                                   json_null_obj());
+                        else if (e->type == ENTRY_TYPE_STRING)
+                                json_append_member(jobj, e->key,
+                                                   json_string_obj(e->value));
+                        else
                                 json_append_member(jobj, e->key, e->value);
-                        }
                 }
         }
 
-        xml_htable_free(&ht);
-        *type = ENTRY_TYPE_OBJECT;
         return jobj;
-        ctxt->depth--;
 }
 
-static void xml2json_ctx_parse(xml2jsonCtxtPtr ctxt, xmlDocPtr doc)
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type)
 {
-        enum xml_entry_type type;
-        if (doc == NULL)
-                return;
+        struct xml_htable ht;
+        xmlNodePtr n;
+        JsonObject *jobj;
 
-        ctxt->doc = doc;
-
-        if ((doc->type == XML_DOCUMENT_NODE) && (doc->children != NULL)) {
-                void *data;
-                char *json_str;
-                data = parse_xmlnode_children(ctxt, doc->children, &type);
-                json_str = json_encode((JsonObject *)data);
-                printf("%s\n", json_str);
-                xfree(json_str);
-                json_free(data);
+        if (node == NULL) {
+                *type = ENTRY_TYPE_NULL;
+                return NULL;
         }
 
+        /* Initialise a ordered hash table */
+        xml_htable_init(&ht);
+
+        for (n = node; n; n = n->next) {
+                void *val;
+                size_t slen = 0;
+
+                switch(n->type) {
+                case XML_ELEMENT_NODE:
+                        parse_xml_element_node(n, &ht, type);
+                        break;
+                case XML_TEXT_NODE:
+                        val = parse_xml_text_node(n, type, &slen);
+                        if (slen == 0) continue;
+                        xml_htable_free(&ht);
+                        return val;
+                default:
+                        break;
+                }
+        }
+
+        /* If we've got here, we are returning a json object */
+        *type = ENTRY_TYPE_OBJECT;
+        jobj = xml_htable_to_json_obj(&ht);
+
+        /* Free the ordered hash table */
+        xml_htable_free(&ht);
+
+        return jobj;
 }
 
 static void parse_xml_tree(xmlDocPtr doc)
 {
-        xml2jsonCtxt ctxt;
 
-        xml2json_init_ctxt(&ctxt);
+        enum xml_entry_type type;
 
-        xml2json_ctx_parse(&ctxt, doc);
+        if (doc == NULL)
+                return;
 
-        xml2json_clean_ctxt(&ctxt);
+        if ((doc->type == XML_DOCUMENT_NODE) && (doc->children != NULL)) {
+                void *data;
+                char *json_str;
+
+                data = parse_xmlnode(doc->children, &type);
+
+                /* Encode our json object into a string */
+                json_str = json_encode((JsonObject *)data);
+                printf("%s\n", json_str);
+                xfree(json_str);
+
+                json_free(data);
+        }
 }
 
 int main(int argc, char **argv)
