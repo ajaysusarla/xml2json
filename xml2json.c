@@ -415,9 +415,11 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
                 }
                 if (tmp->type == XML_TEXT_NODE && tmp->content != NULL) {
                         xmlChar *s = xmlNodeGetContent(tmp);
-                        int len = xmlStrlen(s), t, spaces;
-                        spaces = len;
+                        cstring xstr;
+                        int len = xmlStrlen(s), t;
+                        size_t xlen = 0;
 
+                        cstring_init(&xstr, 0);
                         /* Check if the string is just empty spaces
                          * in which case we just ignore it.
                          */
@@ -428,19 +430,23 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
                                     (s[t] == '\r') ||
                                     (s[t] == '\n') ||
                                     (s[t] == 0x0a)) {
-                                        spaces--;
                                         continue;
                                 }
+                                cstring_addch(&xstr, s[t]);
                         }
 
-                        if (spaces == 0) {
-                                xmlFree(s);
+                        xmlFree(s);
+
+                        if (xstr.len == 0) {
+                                cstring_release(&xstr);
                                 continue;
                         }
+
                         if (s) *type = ENTRY_TYPE_STRING;
                         else *type = ENTRY_TYPE_NULL;
+
                         xml_htable_free(&ht);
-                        return s;
+                        return cstring_detach(&xstr, &xlen);
                 }
         }
 
@@ -450,7 +456,7 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
         while ((e = htable_iter_next_ordered(&iter))) {
                 if (e->entry.count > 1) { /* Array */
                         JsonObject *array;
-                        struct xml_htable_entry *temp;
+                        struct xml_htable_entry *temp = NULL;
                         array = json_array_obj();
                         temp = e;
                         if (e->type == ENTRY_TYPE_NULL)
@@ -465,9 +471,9 @@ static void *parse_xmlnode_children(xml2jsonCtxtPtr ctxt,
                         while ((temp = htable_get_next(&ht.table, temp))) {
                                 if (temp->type == ENTRY_TYPE_NULL)
                                         json_prepend_to_array(array, json_null_obj());
-                                if (temp->type == ENTRY_TYPE_STRING)
+                                else if (temp->type == ENTRY_TYPE_STRING)
                                         json_prepend_to_array(array, json_string_obj(temp->value));
-                                if (temp->type == ENTRY_TYPE_OBJECT)
+                                else if (temp->type == ENTRY_TYPE_OBJECT)
                                         json_prepend_to_array(array, temp->value);
                         }
                         json_append_member(jobj, (const char *)e->key, array);
