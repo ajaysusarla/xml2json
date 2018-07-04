@@ -251,6 +251,7 @@ void htable_iter_init_ordered(struct htable *ht, struct htable_iter *iter)
 {
         iter->ht = ht;
         iter->pos = ht->iter_head;
+        iter->count = 0;
         iter->next = NULL;
 }
 
@@ -265,10 +266,12 @@ void *htable_iter_next_ordered(struct htable_iter *iter)
 {
         struct htable_entry *current = NULL;
 
-        /* if (iter->pos > iter->ht->count) */
-        /*         return NULL; */
+        iter->count += 1;
 
         if (iter->pos == UINT_MAX)
+                return NULL;
+
+        if (iter->count > iter->ht->count)
                 return NULL;
 
         current = iter->ht->table[iter->pos];
