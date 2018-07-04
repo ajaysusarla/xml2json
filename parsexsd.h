@@ -6,6 +6,11 @@
 
 #ifndef XML2JSON_XSD_H
 #define XML2JSON_XSD_H
+#endif
+
+#define LIBXML_SCHEMAS_ENABLED
+#include <libxml/xmlschemastypes.h>
+#include <libxml/schemasInternals.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +24,7 @@ extern "C" {
  * There is no prev pointer as the search for the nodeName always start from root node 
 
 TODO: Incorporate the type as well and pass it on to JsonObject  
-TODO: Add macros to derive the isArray from min/max occurs */
+TODO: Add macros to derive the isArray from min/max occurs 
 
 
 struct xsdNodeInfo {
@@ -29,13 +34,13 @@ struct xsdNodeInfo {
 		int maxOccurs ;
 		int isArray ;
 		struct xsdNodeInfo *next ;
-}
+};
 
 typedef struct xsdNodeInfo* xsdNodeInfo ;
 
 
-/* Allocate memory for struct and return pointer, if fails return -1 : caller has to free it 
-TODO: Convert the mem and str functions from the xml2json library */
+Allocate memory for struct and return pointer, if fails return -1 : caller has to free it 
+TODO: Convert the mem and str functions from the xml2json library 
 
 int xsdNodeInfo_init(xsdNodeInfo* n) {
 
@@ -46,25 +51,22 @@ int xsdNodeInfo_init(xsdNodeInfo* n) {
 		n->next = NULL ;
 		return n;
 }
-/* Populate the xsdNodeInfo struct from XSD, if not found return NULL */
+ Populate the xsdNodeInfo struct from XSD, if not found return NULL */
+
+int getNodeInfo(xmlNodePtr xsdroot, xmlNodePtr node);
 
 int getNodeInfo(xmlNodePtr xsdroot, xmlNodePtr node)
 {
-    xmlNodePtr n;
-	xsdNodeInfo xsdn = NULL;
-
-	xsdNodeInfo_init(xsdn) ;
-
+	xmlNodePtr n = NULL ;
 
 	if(xsdroot == NULL || node == NULL)
-			return ;
+			return 0;
 
     for (n = xsdroot; n; n = n->next) {
-            if ((xmlStrEqual(n->properties != NULL)) && xmlStrEqual(n->name, node-name)) >	{
-					xsdn->minOccurs = 0 ;
-					xsdn->maxOccurs = 100 ;
+            if (((n->properties != NULL)) && xmlStrEqual(n->name, node->name))	{
 					return 1 ;
             }
-            getNodeInfo(node->children);
+            getNodeInfo(xsdroot, node->children);
     }
+	return 0;
 }

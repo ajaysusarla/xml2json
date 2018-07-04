@@ -3,10 +3,12 @@
  * Copyright (c) 2018 Partha Susarla <mail@spartha.org>
  */
 
+#define LIBXML_SCHEMAS_ENABLED
 #include "cstring.h"
 #include "htable.h"
 #include "json.h"
 #include "util.h"
+#include "parsexsd.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -20,6 +22,8 @@
 #include <libxml/parser.h>
 #include <libxml/chvalid.h>
 #include <libxml/xpath.h>
+#include <libxml/xmlschemastypes.h>
+#include <libxml/schemasInternals.h>
 
 /**
  * Hashtable
@@ -155,10 +159,10 @@ static void xml_htable_free(struct xml_htable *ht)
 /**
  * XML parsing
  */
-static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type);
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type, xmlNodePtr xsdroot);
 
 static void *parse_xml_element_attributes(xmlAttrPtr attr,
-                                          enum xml_entry_type *type)
+                                          enum xml_entry_type *type, xmlNodePtr xsdroot)
 {
         JsonObject *attrobj = NULL;
 
@@ -178,7 +182,7 @@ static void *parse_xml_element_attributes(xmlAttrPtr attr,
                 cstring_addch(&str, '@');
                 cstring_addstr(&str, (char *)attr->name);
 
-                val = parse_xmlnode(attr->children, type);
+                val = parse_xmlnode(attr->children, type, xsdroot);
 
                 if (*type == ENTRY_TYPE_STRING) {
                         JsonObject *strobj;
@@ -199,7 +203,7 @@ static void *parse_xml_element_attributes(xmlAttrPtr attr,
 }
 
 static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
-                                    enum xml_entry_type *type)
+                                    enum xml_entry_type *type, xmlNodePtr xsdroot)
 {
         void *val = NULL;
         int has_attr = 0;
@@ -212,14 +216,14 @@ static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
         if (node->properties != NULL) {
                 void *attrval = NULL;
                 /* We need to parse XML attributes */
-                attrval = parse_xml_element_attributes(node->properties, type);
+                attrval = parse_xml_element_attributes(node->properties, type, xsdroot);
 
                 xml_htable_put(ht, (char *)node->name, xmlStrlen(node->name),
                                attrval, *type);
                 has_attr = 1;
         }
 
-        val = parse_xmlnode(node->children, type);
+        val = parse_xmlnode(node->children, type, xsdroot);
         if (has_attr && *type == ENTRY_TYPE_NULL) {
                 if (val) free(val);
                 return has_attr;
@@ -232,7 +236,7 @@ static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
 }
 
 static char *parse_xml_text_node(xmlNodePtr node, enum xml_entry_type *type,
-                                 size_t *slen)
+                                 size_t *slen, xmlNodePtr xsdroot)
 {
         xmlChar *content;
         cstring str;
@@ -259,6 +263,8 @@ static char *parse_xml_text_node(xmlNodePtr node, enum xml_entry_type *type,
         }
 
         if (!content) *type = ENTRY_TYPE_NULL;
+
+		*type = getNodeInfo(node, xsdroot) ;
 
         xmlFree(content);
 
@@ -328,7 +334,7 @@ static JsonObject *xml_htable_to_json_obj(struct xml_htable *ht)
         return jobj;
 }
 
-static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type)
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type, xmlNodePtr xsdroot)
 {
         struct xml_htable ht;
         xmlNodePtr n;
@@ -348,10 +354,10 @@ static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type)
 
                 switch(n->type) {
                 case XML_ELEMENT_NODE:
-                        parse_xml_element_node(n, &ht, type);
+                        parse_xml_element_node(n, &ht, type, xsdroot);
                         break;
                 case XML_TEXT_NODE:
-                        val = parse_xml_text_node(n, type, &slen);
+                        val = parse_xml_text_node(n, type, &slen, xsdroot);
                         if (slen == 0) continue;
                         xml_htable_free(&ht);
                         return val;
@@ -370,7 +376,7 @@ static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type)
         return jobj;
 }
 
-static void parse_xml_tree(xmlDocPtr doc)
+static void parse_xml_tree(xmlDocPtr doc, xmlNodePtr xsdroot)
 {
 
         enum xml_entry_type type;
@@ -382,7 +388,7 @@ static void parse_xml_tree(xmlDocPtr doc)
                 void *data;
                 char *json_str;
 
-                data = parse_xmlnode(doc->children, &type);
+                data = parse_xmlnode(doc->children, &type, xsdroot);
 
                 /* Encode our json object into a string */
                 json_str = json_encode((JsonObject *)data);
@@ -400,22 +406,30 @@ int main(int argc, char **argv)
         xmlDocPtr doc = NULL;
         char *base;
         int options = XML_PARSE_COMPACT;
+
+		/* XSD related variables */
+		int ret ;
+		xmlSchemaPtr    schema = NULL;
+		xmlSchemaParserCtxtPtr ctxt;
+		xmlSchemaValidCtxtPtr vctxt;
+		xmlParserCtxtPtr pctxt = NULL;
+
 #ifdef LINUX
         options |= XML_PARSE_BIG_LINES;
 #endif
 
-        if (argc != 2) {
-                fprintf(stderr, "%s <xml-file>\n", argv[0]);
+        if (argc != 3) {
+                fprintf(stderr, "%s <xsd-file> <xml-file>\n", argv[0]);
                 exit(EXIT_FAILURE);
         }
 
         /* mmap the file() */
-        if (stat(argv[1], &sbinfo) < 0) {
+        if (stat(argv[2], &sbinfo) < 0) {
                 perror("stat: ");
                 exit(EXIT_FAILURE);
         }
 
-        if ((fd = open(argv[1], O_RDONLY)) < 0) {
+        if ((fd = open(argv[2], O_RDONLY)) < 0) {
                 perror("open: ");
                 exit(EXIT_FAILURE);
         }
@@ -434,7 +448,28 @@ int main(int argc, char **argv)
         munmap((char *)base, sbinfo.st_size);
         close(fd);
 
-        parse_xml_tree(doc);
+		/* Read the xsd and validate the xml before building XSD and XML/JSON structures */
+		ctxt = xmlSchemaNewParserCtxt(argv[1]);
+		xmlSchemaSetParserErrors(ctxt, (xmlSchemaValidityErrorFunc) fprintf, (xmlSchemaValidityWarningFunc) fprintf, stderr);
+		schema = xmlSchemaParse(ctxt);
+
+		if(schema == NULL) {
+				exit(EXIT_FAILURE);
+		}
+
+        vctxt = xmlSchemaNewValidCtxt(schema);
+        pctxt = xmlSchemaValidCtxtGetParserCtxt(vctxt) ;
+
+        xmlSchemaSetValidErrors(vctxt, (xmlSchemaValidityErrorFunc) fprintf, (xmlSchemaValidityWarningFunc) fprintf, stderr);
+        ret = xmlSchemaValidateDoc(vctxt, doc);
+        if (ret == 0) {
+            printf("%s validates\n", argv[2]);
+        } else if (ret > 0) {
+            printf("%s fails to validate\n", argv[2]);
+        } else {
+            printf("%s validation generated an internal error\n", argv[2]);
+        }
+        parse_xml_tree(doc, schema->doc->children);
 
         xmlFreeDoc(doc);
 
