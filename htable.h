@@ -102,7 +102,7 @@ extern void *htable_remove(struct htable *ht, const void *key,
 struct htable_iter {
         struct htable *ht;
         struct htable_entry *next;
-        int count;
+        unsigned int count;
         unsigned int pos;
 };
 
