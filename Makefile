@@ -1,8 +1,22 @@
+#libxml options
 LIBXML_LIBS=$(shell xml2-config --libs)
 LIBXML_CFLAGS=$(shell xml2-config --cflags)
+
+## Platform
+UNAME := $(shell $(CC) -dumpmachine 2>&1 | grep -E -o "linux|darwin")
+
+ifeq ($(UNAME), linux)
+OSFLAGS = -DLINUX -D_GNU_SOURCE
+DEBUG = -g -ggdb
+else ifeq ($(UNAME), darwin)
+OSFLAGS = -DMACOSX -D_BSD_SOURCE
+DEBUG = -g
+endif
+
 CFLAGS=$(LIBXML_CFLAGS) \
 	-O0 \
-	-g -ggdb \
+	$(OSFLAGS) \
+	$(DEBUG) \
 	-pedantic \
 	-Wall \
 	-Wextra \

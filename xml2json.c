@@ -399,7 +399,10 @@ int main(int argc, char **argv)
         struct stat sbinfo;
         xmlDocPtr doc = NULL;
         char *base;
-        int options = XML_PARSE_COMPACT | XML_PARSE_BIG_LINES;
+        int options = XML_PARSE_COMPACT;
+#ifdef LINUX
+        options |= XML_PARSE_BIG_LINES;
+#endif
 
         if (argc != 2) {
                 fprintf(stderr, "%s <xml-file>\n", argv[0]);
