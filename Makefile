@@ -48,7 +48,7 @@ Makefile.dep:
 -include Makefile.dep
 
 %.o : %.c
-	gcc $(CFLAGS) -c $<
+	gcc $(CFLAGS) -c -g $<
 
 xml2json: $(LIBOBJS)
 	gcc $(LIBXML_LIBS) -o xml2json $(LIBOBJS)
