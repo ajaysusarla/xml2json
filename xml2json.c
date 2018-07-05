@@ -159,19 +159,20 @@ static void xml_htable_free(struct xml_htable *ht)
 /**
  * XML parsing
  */
-static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type, xmlNodePtr xsdroot);
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type,
+                           xmlNodePtr xsdroot);
 
-static void *parse_xml_element_attributes(xmlAttrPtr attr,
-                                          enum xml_entry_type *type, xmlNodePtr xsdroot)
+static void *parse_xml_element_attributes(xmlAttrPtr attr, void *attrobj,
+                                          enum xml_entry_type *type,
+                                          xmlNodePtr xsdroot)
 {
-        JsonObject *attrobj = NULL;
-
         if (attr == NULL) {
                 *type = ENTRY_TYPE_NULL;
                 return NULL;
         }
 
-        attrobj = json_new();
+        if (attrobj == NULL)
+                attrobj = json_new();
 
         while (attr != NULL) {
                 cstring str;
@@ -188,7 +189,7 @@ static void *parse_xml_element_attributes(xmlAttrPtr attr,
                         JsonObject *strobj;
                         strobj = json_string_obj(val);
                         free(val);
-                        json_append_member(attrobj, str.buf, strobj);
+                        json_prepend_member(attrobj, str.buf, strobj);
                 } else {
                         printf("attributes: non string type entry!\n");
                 }
@@ -207,26 +208,45 @@ static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
 {
         void *val = NULL;
         int has_attr = 0;
+        void *attrval = NULL;
+        JsonObject *attrobj = NULL;
 
         if (node == NULL) {
                 *type = ENTRY_TYPE_NULL;
                 return -1;
         }
 
-        if (node->properties != NULL) {
-                void *attrval = NULL;
-                /* We need to parse XML attributes */
-                attrval = parse_xml_element_attributes(node->properties, type, xsdroot);
-
-                xml_htable_put(ht, (char *)node->name, xmlStrlen(node->name),
-                               attrval, *type);
-                has_attr = 1;
+        val = parse_xmlnode(node->children, type, xsdroot);
+        switch (*type) {
+        case ENTRY_TYPE_NULL:
+                xfree(val);
+                val = NULL;
+                break;
+        case ENTRY_TYPE_STRING:
+                if (node->properties) {
+                        attrobj = json_new();
+                        json_prepend_member(attrobj, "#text",
+                                            json_string_obj(val));
+                        free(val);
+                        val = attrobj;
+                }
+                break;
+        case ENTRY_TYPE_OBJECT:
+        case ENTRY_TYPE_ARRAY:
+        case ENTRY_TYPE_BOOL:
+        case ENTRY_TYPE_NUMBER:
+        default:
+                break;
         }
 
-        val = parse_xmlnode(node->children, type, xsdroot);
-        if (has_attr && *type == ENTRY_TYPE_NULL) {
-                if (val) free(val);
-                return has_attr;
+        if (node->properties != NULL) {
+                /* We need to parse XML attributes */
+
+                attrval = parse_xml_element_attributes(node->properties, val,
+                                                       type, xsdroot);
+                if (val == NULL)
+                        val = attrval;
+                has_attr = 1;
         }
 
         xml_htable_put(ht, (char *)node->name, xmlStrlen(node->name),
