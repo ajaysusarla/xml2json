@@ -1,5 +1,5 @@
 
-/* parsexsd.h : Walk the xsd tree as provided by libxml 
+/* parsexsd.h : Walk the xsd tree as provided by libxml
  *
  *
  * Copyright (c) 2018 Ram Gopalkrisha ramkumarg1@gmail.com */
@@ -20,11 +20,12 @@ extern "C" {
 #endif
 
 
-/* Structure to hold node name, isArray flag derived from min and max occurs from XSD 
- * There is no prev pointer as the search for the nodeName always start from root node 
+/* Structure to hold node name, isArray flag derived from min and max occurs
+ * from XSD. There is no prev pointer as the search for the nodeName always
+ start from root node
 
-TODO: Incorporate the type as well and pass it on to JsonObject  
-TODO: Add macros to derive the isArray from min/max occurs 
+TODO: Incorporate the type as well and pass it on to JsonObject
+TODO: Add macros to derive the isArray from min/max occurs
 
 
 struct xsdNodeInfo {
@@ -53,20 +54,19 @@ int xsdNodeInfo_init(xsdNodeInfo* n) {
 }
  Populate the xsdNodeInfo struct from XSD, if not found return NULL */
 
-int getNodeInfo(xmlNodePtr xsdroot, xmlNodePtr node);
-
-int getNodeInfo(xmlNodePtr xsdroot, xmlNodePtr node)
+static inline int getNodeInfo(xmlNodePtr xsdroot, xmlNodePtr node)
 {
-	xmlNodePtr n = NULL ;
+        xmlNodePtr n = NULL ;
 
-	if(xsdroot == NULL || node == NULL)
-			return 0;
+        if(xsdroot == NULL || node == NULL)
+                return 0;
 
-    for (n = xsdroot; n; n = n->next) {
-            if (((n->properties != NULL)) && xmlStrEqual(n->name, node->name))	{
-					return 1 ;
-            }
-            getNodeInfo(xsdroot, node->children);
-    }
-	return 0;
+        for (n = xsdroot; n; n = n->next) {
+                if (((n->properties != NULL)) &&
+                    xmlStrEqual(n->name, node->name)) {
+                        return 1 ;
+                }
+                getNodeInfo(xsdroot, node->children);
+        }
+        return 0;
 }

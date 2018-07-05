@@ -264,7 +264,7 @@ static char *parse_xml_text_node(xmlNodePtr node, enum xml_entry_type *type,
 
         if (!content) *type = ENTRY_TYPE_NULL;
 
-		*type = getNodeInfo(node, xsdroot) ;
+        *type = getNodeInfo(node, xsdroot) ;
 
         xmlFree(content);
 
@@ -334,7 +334,8 @@ static JsonObject *xml_htable_to_json_obj(struct xml_htable *ht)
         return jobj;
 }
 
-static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type, xmlNodePtr xsdroot)
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type,
+                           xmlNodePtr xsdroot)
 {
         struct xml_htable ht;
         xmlNodePtr n;
@@ -407,12 +408,12 @@ int main(int argc, char **argv)
         char *base;
         int options = XML_PARSE_COMPACT;
 
-		/* XSD related variables */
-		int ret ;
-		xmlSchemaPtr    schema = NULL;
-		xmlSchemaParserCtxtPtr ctxt;
-		xmlSchemaValidCtxtPtr vctxt;
-		xmlParserCtxtPtr pctxt = NULL;
+        /* XSD related variables */
+        int ret ;
+        xmlSchemaPtr    schema = NULL;
+        xmlSchemaParserCtxtPtr ctxt;
+        xmlSchemaValidCtxtPtr vctxt;
+        xmlParserCtxtPtr pctxt = NULL;
 
 #ifdef LINUX
         options |= XML_PARSE_BIG_LINES;
@@ -448,19 +449,24 @@ int main(int argc, char **argv)
         munmap((char *)base, sbinfo.st_size);
         close(fd);
 
-		/* Read the xsd and validate the xml before building XSD and XML/JSON structures */
-		ctxt = xmlSchemaNewParserCtxt(argv[1]);
-		xmlSchemaSetParserErrors(ctxt, (xmlSchemaValidityErrorFunc) fprintf, (xmlSchemaValidityWarningFunc) fprintf, stderr);
-		schema = xmlSchemaParse(ctxt);
+        /* Read the xsd and validate the xml before building XSD and XML/JSON
+           structures */
+        ctxt = xmlSchemaNewParserCtxt(argv[1]);
+        xmlSchemaSetParserErrors(ctxt, (xmlSchemaValidityErrorFunc)fprintf,
+                                 (xmlSchemaValidityWarningFunc)fprintf,
+                                 stderr);
+        schema = xmlSchemaParse(ctxt);
 
-		if(schema == NULL) {
-				exit(EXIT_FAILURE);
-		}
+        if(schema == NULL) {
+                exit(EXIT_FAILURE);
+        }
 
         vctxt = xmlSchemaNewValidCtxt(schema);
         pctxt = xmlSchemaValidCtxtGetParserCtxt(vctxt) ;
 
-        xmlSchemaSetValidErrors(vctxt, (xmlSchemaValidityErrorFunc) fprintf, (xmlSchemaValidityWarningFunc) fprintf, stderr);
+        xmlSchemaSetValidErrors(vctxt, (xmlSchemaValidityErrorFunc)fprintf,
+                                (xmlSchemaValidityWarningFunc) fprintf,
+                                stderr);
         ret = xmlSchemaValidateDoc(vctxt, doc);
         if (ret == 0) {
             printf("%s validates\n", argv[2]);
