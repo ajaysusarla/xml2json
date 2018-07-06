@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <getopt.h>
 
 #include <libxml/parser.h>
 #include <libxml/chvalid.h>
@@ -420,13 +421,25 @@ static void parse_xml_tree(xmlDocPtr doc, xmlNodePtr xsdroot)
         }
 }
 
+static void usage_and_die(void)
+{
+        fprintf(stderr, "xml2json - A program to convert an XML file to JSON!\n");
+        fprintf(stderr, "USAGE: xml2json <xmlfile> -x=<xsdfile>\n");
+        fprintf(stderr, " xsd|x  : use the xsd file to validate!\n");
+        fprintf(stderr, "          (This is optional)\n");
+        fprintf(stderr, " help|h : print this help and exit!\n");
+        fprintf(stderr, "\n");
+
+        exit(1);
+}
+
 int main(int argc, char **argv)
 {
         int fd;
         struct stat sbinfo;
         xmlDocPtr doc = NULL;
         char *base;
-        int options = XML_PARSE_COMPACT;
+        int xml_options = XML_PARSE_COMPACT;
 
         /* XSD related variables */
         int ret ;
@@ -435,22 +448,48 @@ int main(int argc, char **argv)
         xmlSchemaValidCtxtPtr vctxt;
         xmlParserCtxtPtr pctxt = NULL;
 
+        static struct option long_options[] = {
+                {"xsd", required_argument, NULL, 'x'},
+                {"help", no_argument, NULL, 'h'},
+                {NULL, 0, NULL, 0}
+        };
+        int option;
+        int option_index;
+        char *xsdfile = NULL;
+        char *xmlfile = NULL;
+
 #ifdef LINUX
-        options |= XML_PARSE_BIG_LINES;
+        xml_options |= XML_PARSE_BIG_LINES;
 #endif
 
-        if (argc != 3) {
-                fprintf(stderr, "%s <xsd-file> <xml-file>\n", argv[0]);
-                exit(EXIT_FAILURE);
+        while ((option = getopt_long(argc, argv, "hx:",
+                                    long_options,
+                                    &option_index)) != -1) {
+                switch (option) {
+                case 'x':
+                        xsdfile = optarg;
+                        break;
+                case 'h':
+                case '?':
+                default:
+                        usage_and_die();
+                        break;
+                }
         }
 
+        if (argc - optind != 1) {
+                usage_and_die();
+        }
+
+        xmlfile = argv[optind++];
+
         /* mmap the file() */
-        if (stat(argv[2], &sbinfo) < 0) {
+        if (stat(xmlfile, &sbinfo) < 0) {
                 perror("stat: ");
                 exit(EXIT_FAILURE);
         }
 
-        if ((fd = open(argv[2], O_RDONLY)) < 0) {
+        if ((fd = open(xmlfile, O_RDONLY)) < 0) {
                 perror("open: ");
                 exit(EXIT_FAILURE);
         }
@@ -463,42 +502,43 @@ int main(int argc, char **argv)
         }
 
         /* Read into an xmlDocPtr */
-        doc = xmlReadMemory((char *) base, sbinfo.st_size, argv[1],
-                            NULL, options);
+        doc = xmlReadMemory((char *) base, sbinfo.st_size, xmlfile,
+                            NULL, xml_options);
 
         munmap((char *)base, sbinfo.st_size);
         close(fd);
 
         /* Read the xsd and validate the xml before building XSD and XML/JSON
            structures */
-        ctxt = xmlSchemaNewParserCtxt(argv[1]);
-        xmlSchemaSetParserErrors(ctxt, (xmlSchemaValidityErrorFunc)fprintf,
-                                 (xmlSchemaValidityWarningFunc)fprintf,
-                                 stderr);
-        schema = xmlSchemaParse(ctxt);
+        if (xsdfile != NULL) {
+                ctxt = xmlSchemaNewParserCtxt(xsdfile);
+                xmlSchemaSetParserErrors(ctxt, (xmlSchemaValidityErrorFunc)fprintf,
+                                         (xmlSchemaValidityWarningFunc)fprintf,
+                                         stderr);
+                schema = xmlSchemaParse(ctxt);
 
-        if(schema == NULL) {
-                exit(EXIT_FAILURE);
+                if(schema == NULL) {
+                        exit(EXIT_FAILURE);
+                }
+
+                vctxt = xmlSchemaNewValidCtxt(schema);
+                pctxt = xmlSchemaValidCtxtGetParserCtxt(vctxt) ;
+
+                xmlSchemaSetValidErrors(vctxt, (xmlSchemaValidityErrorFunc)fprintf,
+                                        (xmlSchemaValidityWarningFunc) fprintf,
+                                        stderr);
+                ret = xmlSchemaValidateDoc(vctxt, doc);
+                if (ret == 0) {
+                        printf("%s validates\n", xmlfile);
+                } else if (ret > 0) {
+                        printf("%s fails to validate\n", xmlfile);
+                } else {
+                        printf("%s validation generated an internal error\n", xmlfile);
+                }
         }
-
-        vctxt = xmlSchemaNewValidCtxt(schema);
-        pctxt = xmlSchemaValidCtxtGetParserCtxt(vctxt) ;
-
-        xmlSchemaSetValidErrors(vctxt, (xmlSchemaValidityErrorFunc)fprintf,
-                                (xmlSchemaValidityWarningFunc) fprintf,
-                                stderr);
-        ret = xmlSchemaValidateDoc(vctxt, doc);
-        if (ret == 0) {
-            printf("%s validates\n", argv[2]);
-        } else if (ret > 0) {
-            printf("%s fails to validate\n", argv[2]);
-        } else {
-            printf("%s validation generated an internal error\n", argv[2]);
-        }
-        parse_xml_tree(doc, schema->doc->children);
+        parse_xml_tree(doc, xsdfile ? schema->doc->children : NULL);
 
         xmlFreeDoc(doc);
 
         exit(EXIT_SUCCESS);
 }
-
