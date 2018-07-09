@@ -21,7 +21,6 @@ CFLAGS=$(LIBXML_CFLAGS) \
 	-Wall \
 	-Wextra \
 	-Wshadow \
-	-Wrestrict \
 	-Wformat=2 \
 	-Wwrite-strings \
 	-Wcast-qual \
