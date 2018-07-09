@@ -1,0 +1,36 @@
+language: c
+dist: trusty
+group: edge
+addons:
+  apt:
+    packages:
+      - pkg-config
+      - libxml2
+      - libxml2-dev
+
+env:
+  global:
+    - USE_CCACHE=1
+    - LIBRARY_PATH=/lib/x86_64-linux-gnu/
+
+cache:
+  apt: true
+  ccache: true
+
+os: linux
+compiler: gcc
+
+install:
+  # Install required stuff
+
+before_script:
+  - ccache --version
+  - ccache --zero-stats
+  - gcc -v
+
+script:
+  - make
+
+branches:
+  only:
+    - master
