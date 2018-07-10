@@ -27,6 +27,7 @@ before_script:
   - ccache --version
   - ccache --zero-stats
   - gcc -v
+  - xml2-config --version
 
 script:
   - make
