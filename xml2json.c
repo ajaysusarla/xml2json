@@ -49,6 +49,10 @@ struct xml_htable_entry {
         void *value;
 };
 
+/* Global variable not prefered, need to find the correct function to pass - for now developing functionality */
+
+xmlNodePtr xsdroot = NULL ;
+
 static struct xml_htable_entry *alloc_xml_htable_entry(char *key,
                                                        size_t keylen,
                                                        void *value,
@@ -159,10 +163,10 @@ static void xml_htable_free(struct xml_htable *ht)
 /**
  * XML parsing
  */
-static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type, xmlNodePtr xsdroot);
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type);
 
 static void *parse_xml_element_attributes(xmlAttrPtr attr,
-                                          enum xml_entry_type *type, xmlNodePtr xsdroot)
+                                          enum xml_entry_type *type)
 {
         JsonObject *attrobj = NULL;
 
@@ -182,7 +186,7 @@ static void *parse_xml_element_attributes(xmlAttrPtr attr,
                 cstring_addch(&str, '@');
                 cstring_addstr(&str, (char *)attr->name);
 
-                val = parse_xmlnode(attr->children, type, xsdroot);
+                val = parse_xmlnode(attr->children, type);
 
                 if (*type == ENTRY_TYPE_STRING) {
                         JsonObject *strobj;
@@ -203,7 +207,7 @@ static void *parse_xml_element_attributes(xmlAttrPtr attr,
 }
 
 static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
-                                    enum xml_entry_type *type, xmlNodePtr xsdroot)
+                                    enum xml_entry_type *type)
 {
         void *val = NULL;
         int has_attr = 0;
@@ -216,14 +220,14 @@ static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
         if (node->properties != NULL) {
                 void *attrval = NULL;
                 /* We need to parse XML attributes */
-                attrval = parse_xml_element_attributes(node->properties, type, xsdroot);
+                attrval = parse_xml_element_attributes(node->properties, type);
 
                 xml_htable_put(ht, (char *)node->name, xmlStrlen(node->name),
                                attrval, *type);
                 has_attr = 1;
         }
 
-        val = parse_xmlnode(node->children, type, xsdroot);
+        val = parse_xmlnode(node->children, type);
         if (has_attr && *type == ENTRY_TYPE_NULL) {
                 if (val) free(val);
                 return has_attr;
@@ -236,7 +240,7 @@ static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
 }
 
 static char *parse_xml_text_node(xmlNodePtr node, enum xml_entry_type *type,
-                                 size_t *slen, xmlNodePtr xsdroot)
+                                 size_t *slen)
 {
         xmlChar *content;
         cstring str;
@@ -263,8 +267,6 @@ static char *parse_xml_text_node(xmlNodePtr node, enum xml_entry_type *type,
         }
 
         if (!content) *type = ENTRY_TYPE_NULL;
-
-        *type = getNodeInfo(node, xsdroot) ;
 
         xmlFree(content);
 
@@ -334,8 +336,7 @@ static JsonObject *xml_htable_to_json_obj(struct xml_htable *ht)
         return jobj;
 }
 
-static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type,
-                           xmlNodePtr xsdroot)
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type)
 {
         struct xml_htable ht;
         xmlNodePtr n;
@@ -355,10 +356,10 @@ static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type,
 
                 switch(n->type) {
                 case XML_ELEMENT_NODE:
-                        parse_xml_element_node(n, &ht, type, xsdroot);
+                        parse_xml_element_node(n, &ht, type);
                         break;
                 case XML_TEXT_NODE:
-                        val = parse_xml_text_node(n, type, &slen, xsdroot);
+                        val = parse_xml_text_node(n, type, &slen);
                         if (slen == 0) continue;
                         xml_htable_free(&ht);
                         return val;
@@ -377,7 +378,7 @@ static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type,
         return jobj;
 }
 
-static void parse_xml_tree(xmlDocPtr doc, xmlNodePtr xsdroot)
+static void parse_xml_tree(xmlDocPtr doc)
 {
 
         enum xml_entry_type type;
@@ -389,7 +390,7 @@ static void parse_xml_tree(xmlDocPtr doc, xmlNodePtr xsdroot)
                 void *data;
                 char *json_str;
 
-                data = parse_xmlnode(doc->children, &type, xsdroot);
+                data = parse_xmlnode(doc->children, &type);
 
                 /* Encode our json object into a string */
                 json_str = json_encode((JsonObject *)data);
@@ -475,7 +476,15 @@ int main(int argc, char **argv)
         } else {
             printf("%s validation generated an internal error\n", argv[2]);
         }
-        parse_xml_tree(doc, schema->doc->children);
+		xsdroot = schema->doc->children;
+		walkXsdSchema(xsdroot);
+		//print_array_elements();
+		xmlArrayDefPtr t ;
+
+        for(t=rootSchemaDetails ; t ; t=t->next)
+                printf("%s -> %s [ %lu , %d ]\n", t->complexName, t->elemName, t->minOccurs, t->maxOccurs);
+
+        parse_xml_tree(doc); 
 
         xmlFreeDoc(doc);
 
