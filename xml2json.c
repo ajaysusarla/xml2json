@@ -301,7 +301,7 @@ static char *parse_xml_text_node(xmlNodePtr node, enum xml_entry_type *type,
 
 static JsonObject *xml_htable_to_json_obj(struct xml_htable *ht)
 {
-        JsonObject *jobj;
+        JsonObject *jobj = NULL;
         struct htable_iter iter;
         struct xml_htable_entry *e = NULL;
 
@@ -311,7 +311,7 @@ static JsonObject *xml_htable_to_json_obj(struct xml_htable *ht)
 
         while ((e = htable_iter_next_ordered(&iter))) {
                 if (e->entry.count > 1) { /* Array */
-                        JsonObject *array;
+                        JsonObject *array = NULL;
                         struct xml_htable_entry *temp = NULL;
                         temp = e;
 
@@ -394,6 +394,7 @@ static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type,
 
         /* Free the ordered hash table */
         xml_htable_free(&ht);
+        memset(&ht, 0, sizeof(struct xml_htable));
 
         return jobj;
 }
@@ -408,7 +409,7 @@ static void parse_xml_tree(xmlDocPtr doc, xmlNodePtr xsdroot)
 
         if ((doc->type == XML_DOCUMENT_NODE) && (doc->children != NULL)) {
                 void *data;
-                char *json_str;
+                char *json_str = NULL;
 
                 data = parse_xmlnode(doc->children, &type, xsdroot);
 
@@ -418,6 +419,7 @@ static void parse_xml_tree(xmlDocPtr doc, xmlNodePtr xsdroot)
                 xfree(json_str);
 
                 json_free(data);
+                data = NULL;
         }
 }
 
