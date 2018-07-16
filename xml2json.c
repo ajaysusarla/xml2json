@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <getopt.h>
 
 #include <libxml/parser.h>
 #include <libxml/chvalid.h>
@@ -163,19 +164,20 @@ static void xml_htable_free(struct xml_htable *ht)
 /**
  * XML parsing
  */
+
+static void *parse_xml_element_attributes(xmlAttrPtr attr, void *attrobj,
+                                          enum xml_entry_type *type,
+                                          xmlNodePtr xsdroot)
 static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type);
 
-static void *parse_xml_element_attributes(xmlAttrPtr attr,
-                                          enum xml_entry_type *type)
 {
-        JsonObject *attrobj = NULL;
-
         if (attr == NULL) {
                 *type = ENTRY_TYPE_NULL;
                 return NULL;
         }
 
-        attrobj = json_new();
+        if (attrobj == NULL)
+                attrobj = json_new();
 
         while (attr != NULL) {
                 cstring str;
@@ -192,7 +194,7 @@ static void *parse_xml_element_attributes(xmlAttrPtr attr,
                         JsonObject *strobj;
                         strobj = json_string_obj(val);
                         free(val);
-                        json_append_member(attrobj, str.buf, strobj);
+                        json_prepend_member(attrobj, str.buf, strobj);
                 } else {
                         printf("attributes: non string type entry!\n");
                 }
@@ -211,19 +213,43 @@ static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
 {
         void *val = NULL;
         int has_attr = 0;
+        void *attrval = NULL;
+        JsonObject *attrobj = NULL;
 
         if (node == NULL) {
                 *type = ENTRY_TYPE_NULL;
                 return -1;
         }
 
-        if (node->properties != NULL) {
-                void *attrval = NULL;
-                /* We need to parse XML attributes */
-                attrval = parse_xml_element_attributes(node->properties, type);
+        val = parse_xmlnode(node->children, type, xsdroot);
+        switch (*type) {
+        case ENTRY_TYPE_NULL:
+                xfree(val);
+                val = NULL;
+                break;
+        case ENTRY_TYPE_STRING:
+                if (node->properties) {
+                        attrobj = json_new();
+                        json_prepend_member(attrobj, "#text",
+                                            json_string_obj(val));
+                        free(val);
+                        val = attrobj;
+                }
+                break;
+        case ENTRY_TYPE_OBJECT:
+        case ENTRY_TYPE_ARRAY:
+        case ENTRY_TYPE_BOOL:
+        case ENTRY_TYPE_NUMBER:
+        default:
+                break;
+        }
 
-                xml_htable_put(ht, (char *)node->name, xmlStrlen(node->name),
-                               attrval, *type);
+        if (node->properties != NULL) {
+                /* We need to parse XML attributes */
+                attrval = parse_xml_element_attributes(node->properties, val,
+                                                       type, xsdroot);
+                if (val == NULL)
+                        val = attrval;
                 has_attr = 1;
         }
 
@@ -282,7 +308,7 @@ static char *parse_xml_text_node(xmlNodePtr node, enum xml_entry_type *type,
 
 static JsonObject *xml_htable_to_json_obj(struct xml_htable *ht)
 {
-        JsonObject *jobj;
+        JsonObject *jobj = NULL;
         struct htable_iter iter;
         struct xml_htable_entry *e = NULL;
 
@@ -292,7 +318,7 @@ static JsonObject *xml_htable_to_json_obj(struct xml_htable *ht)
 
         while ((e = htable_iter_next_ordered(&iter))) {
                 if (e->entry.count > 1) { /* Array */
-                        JsonObject *array;
+                        JsonObject *array = NULL;
                         struct xml_htable_entry *temp = NULL;
                         temp = e;
 
@@ -374,6 +400,7 @@ static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type)
 
         /* Free the ordered hash table */
         xml_htable_free(&ht);
+        memset(&ht, 0, sizeof(struct xml_htable));
 
         return jobj;
 }
@@ -388,7 +415,7 @@ static void parse_xml_tree(xmlDocPtr doc)
 
         if ((doc->type == XML_DOCUMENT_NODE) && (doc->children != NULL)) {
                 void *data;
-                char *json_str;
+                char *json_str = NULL;
 
                 data = parse_xmlnode(doc->children, &type);
 
@@ -398,7 +425,20 @@ static void parse_xml_tree(xmlDocPtr doc)
                 xfree(json_str);
 
                 json_free(data);
+                data = NULL;
         }
+}
+
+static void usage_and_die(void)
+{
+        fprintf(stderr, "xml2json - A program to convert an XML file to JSON!\n");
+        fprintf(stderr, "USAGE: xml2json <xmlfile> -x=<xsdfile>\n");
+        fprintf(stderr, " xsd|x  : use the xsd file to validate!\n");
+        fprintf(stderr, "          (This is optional)\n");
+        fprintf(stderr, " help|h : print this help and exit!\n");
+        fprintf(stderr, "\n");
+
+        exit(1);
 }
 
 int main(int argc, char **argv)
@@ -407,7 +447,7 @@ int main(int argc, char **argv)
         struct stat sbinfo;
         xmlDocPtr doc = NULL;
         char *base;
-        int options = XML_PARSE_COMPACT;
+        int xml_options = XML_PARSE_COMPACT;
 
         /* XSD related variables */
         int ret ;
@@ -416,22 +456,48 @@ int main(int argc, char **argv)
         xmlSchemaValidCtxtPtr vctxt;
         xmlParserCtxtPtr pctxt = NULL;
 
+        static struct option long_options[] = {
+                {"xsd", required_argument, NULL, 'x'},
+                {"help", no_argument, NULL, 'h'},
+                {NULL, 0, NULL, 0}
+        };
+        int option;
+        int option_index;
+        char *xsdfile = NULL;
+        char *xmlfile = NULL;
+
 #ifdef LINUX
-        options |= XML_PARSE_BIG_LINES;
+        xml_options |= XML_PARSE_BIG_LINES;
 #endif
 
-        if (argc != 3) {
-                fprintf(stderr, "%s <xsd-file> <xml-file>\n", argv[0]);
-                exit(EXIT_FAILURE);
+        while ((option = getopt_long(argc, argv, "hx:",
+                                    long_options,
+                                    &option_index)) != -1) {
+                switch (option) {
+                case 'x':
+                        xsdfile = optarg;
+                        break;
+                case 'h':
+                case '?':
+                default:
+                        usage_and_die();
+                        break;
+                }
         }
 
+        if (argc - optind != 1) {
+                usage_and_die();
+        }
+
+        xmlfile = argv[optind++];
+
         /* mmap the file() */
-        if (stat(argv[2], &sbinfo) < 0) {
+        if (stat(xmlfile, &sbinfo) < 0) {
                 perror("stat: ");
                 exit(EXIT_FAILURE);
         }
 
-        if ((fd = open(argv[2], O_RDONLY)) < 0) {
+        if ((fd = open(xmlfile, O_RDONLY)) < 0) {
                 perror("open: ");
                 exit(EXIT_FAILURE);
         }
@@ -444,50 +510,43 @@ int main(int argc, char **argv)
         }
 
         /* Read into an xmlDocPtr */
-        doc = xmlReadMemory((char *) base, sbinfo.st_size, argv[1],
-                            NULL, options);
+        doc = xmlReadMemory((char *) base, sbinfo.st_size, xmlfile,
+                            NULL, xml_options);
 
         munmap((char *)base, sbinfo.st_size);
         close(fd);
 
         /* Read the xsd and validate the xml before building XSD and XML/JSON
            structures */
-        ctxt = xmlSchemaNewParserCtxt(argv[1]);
-        xmlSchemaSetParserErrors(ctxt, (xmlSchemaValidityErrorFunc)fprintf,
-                                 (xmlSchemaValidityWarningFunc)fprintf,
-                                 stderr);
-        schema = xmlSchemaParse(ctxt);
+        if (xsdfile != NULL) {
+                ctxt = xmlSchemaNewParserCtxt(xsdfile);
+                xmlSchemaSetParserErrors(ctxt, (xmlSchemaValidityErrorFunc)fprintf,
+                                         (xmlSchemaValidityWarningFunc)fprintf,
+                                         stderr);
+                schema = xmlSchemaParse(ctxt);
 
-        if(schema == NULL) {
-                exit(EXIT_FAILURE);
+                if(schema == NULL) {
+                        exit(EXIT_FAILURE);
+                }
+
+                vctxt = xmlSchemaNewValidCtxt(schema);
+                pctxt = xmlSchemaValidCtxtGetParserCtxt(vctxt) ;
+
+                xmlSchemaSetValidErrors(vctxt, (xmlSchemaValidityErrorFunc)fprintf,
+                                        (xmlSchemaValidityWarningFunc) fprintf,
+                                        stderr);
+                ret = xmlSchemaValidateDoc(vctxt, doc);
+                if (ret == 0) {
+                        printf("%s validates\n", xmlfile);
+                } else if (ret > 0) {
+                        printf("%s fails to validate\n", xmlfile);
+                } else {
+                        printf("%s validation generated an internal error\n", xmlfile);
+                }
         }
-
-        vctxt = xmlSchemaNewValidCtxt(schema);
-        pctxt = xmlSchemaValidCtxtGetParserCtxt(vctxt) ;
-
-        xmlSchemaSetValidErrors(vctxt, (xmlSchemaValidityErrorFunc)fprintf,
-                                (xmlSchemaValidityWarningFunc) fprintf,
-                                stderr);
-        ret = xmlSchemaValidateDoc(vctxt, doc);
-        if (ret == 0) {
-            printf("%s validates\n", argv[2]);
-        } else if (ret > 0) {
-            printf("%s fails to validate\n", argv[2]);
-        } else {
-            printf("%s validation generated an internal error\n", argv[2]);
-        }
-		xsdroot = schema->doc->children;
-		walkXsdSchema(xsdroot);
-		//print_array_elements();
-		xmlArrayDefPtr t ;
-
-        for(t=rootSchemaDetails ; t ; t=t->next)
-                printf("%s -> %s [ %lu , %d ]\n", t->complexName, t->elemName, t->minOccurs, t->maxOccurs);
-
-        parse_xml_tree(doc); 
+        parse_xml_tree(doc, xsdfile ? schema->doc->children : NULL);
 
         xmlFreeDoc(doc);
 
         exit(EXIT_SUCCESS);
 }
-
