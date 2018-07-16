@@ -164,12 +164,19 @@ static void xml_htable_free(struct xml_htable *ht)
 /**
  * XML parsing
  */
+<<<<<<< HEAD
 static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type,
                            xmlNodePtr xsdroot);
 
 static void *parse_xml_element_attributes(xmlAttrPtr attr, void *attrobj,
                                           enum xml_entry_type *type,
                                           xmlNodePtr xsdroot)
+=======
+static void *parse_xmlnode(xmlNodePtr node, enum xml_entry_type *type);
+
+static void *parse_xml_element_attributes(xmlAttrPtr attr,
+                                          enum xml_entry_type *type)
+>>>>>>> c975d561604861d3ac22ab0b2f4c9eb3fdd7e7fd
 {
         if (attr == NULL) {
                 *type = ENTRY_TYPE_NULL;
@@ -246,6 +253,10 @@ static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
 
         if (node->properties != NULL) {
                 /* We need to parse XML attributes */
+<<<<<<< HEAD
+=======
+                attrval = parse_xml_element_attributes(node->properties, type);
+>>>>>>> c975d561604861d3ac22ab0b2f4c9eb3fdd7e7fd
 
                 attrval = parse_xml_element_attributes(node->properties, val,
                                                        type, xsdroot);
@@ -545,7 +556,19 @@ int main(int argc, char **argv)
                         printf("%s validation generated an internal error\n", xmlfile);
                 }
         }
+<<<<<<< HEAD
         parse_xml_tree(doc, xsdfile ? schema->doc->children : NULL);
+=======
+		xsdroot = schema->doc->children;
+		walkXsdSchema(xsdroot);
+		//print_array_elements();
+		xmlArrayDefPtr t ;
+
+        for(t=rootSchemaDetails ; t ; t=t->next)
+                printf("%s -> %s [ %lu , %d ]\n", t->complexName, t->elemName, t->minOccurs, t->maxOccurs);
+
+        parse_xml_tree(doc); 
+>>>>>>> c975d561604861d3ac22ab0b2f4c9eb3fdd7e7fd
 
         xmlFreeDoc(doc);
 
