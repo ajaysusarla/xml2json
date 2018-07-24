@@ -125,6 +125,8 @@ xmlChar* getComplexTypeName(xmlNodePtr node) {
 		return (xmlChar*)&nullstring ;
 }
 
+/* For debugging purposes */
+
 void print(xmlNodePtr node) {
 
 		xmlNodePtr t ;
