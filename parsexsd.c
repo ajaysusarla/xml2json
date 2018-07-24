@@ -27,6 +27,9 @@ extern "C" {
  * minO - minimum occurence
  * maxO - maximum occurence
  */
+xmlArrayDefPtr xsdmaproot = NULL ;
+xmlChar nullstring[1] = "\0" ;
+char complexName[100];
 
 int buildArrayTree(xmlChar* complexNamein, xmlChar* elemName, xmlChar* minOin, xmlChar* maxOin, xmlChar* typein) {
 
@@ -39,12 +42,13 @@ int buildArrayTree(xmlChar* complexNamein, xmlChar* elemName, xmlChar* minOin, x
 		t->isArray = 0 ;
 		t->next = NULL ;
 		xmlArrayDefPtr r = NULL; 
+		xmlChar ubound[10]="unbounded\0" ;
 
 		strcpy((char*)t->complexName, (char*)complexNamein);
 		strcpy((char*)t->elemName, (char*)elemName);
 		strcpy((char*)t->type, (char*)typein);
 
-		if(strlen((char*)complexName) == 0) strcpy((char*)complexName, "root");
+		if(strlen((char*)complexNamein) == 0) strcpy((char*)complexNamein, "root");
 
 		if(strlen((char*)minOin) == 0) strcpy((char*)minOin, "0");
 		t->minOccurs = strtol((char*)minOin,NULL,10);
@@ -57,7 +61,7 @@ int buildArrayTree(xmlChar* complexNamein, xmlChar* elemName, xmlChar* minOin, x
 
 		/* -99 is an arbitary negative number, as XSD comes with "unbound", the size of array is platform dependent
 		 * also, this number has little or no impact in conversion" */
-		if(xmlStrEqual(maxOin, (xmlChar*)"unbounded"))  strcpy((char*)maxOin, "-99"); 
+		if(xmlStrEqual(maxOin, (xmlChar*)&ubound))  strcpy((char*)maxOin, "-99"); 
 
 		t->maxOccurs = strtol((char*)maxOin,NULL,10);
 		if (errno == EINVAL) {
@@ -75,11 +79,11 @@ int buildArrayTree(xmlChar* complexNamein, xmlChar* elemName, xmlChar* minOin, x
 		if((t->minOccurs > 1) || ( t->minOccurs > 1 && t->maxOccurs > 1))
 				t->isArray = MANDATORY_AND_ARRAY ;
 
-		if(rootSchemaDetails == NULL) {
-				rootSchemaDetails = t;
+		if(xsdmaproot == NULL) {
+				xsdmaproot = t;
 				return 1;
 		} else {
-				for(r=rootSchemaDetails ; r->next ; r=r->next);
+				for(r=xsdmaproot ; r->next ; r=r->next);
 				r->next=t ;
 				return 1;
 		}
@@ -88,14 +92,15 @@ int buildArrayTree(xmlChar* complexNamein, xmlChar* elemName, xmlChar* minOin, x
 xmlChar* getType(xmlNodePtr node) {
 
 		xmlAttrPtr anode = node->properties ;
+		xmlChar xsdType[5]="type\0" ;
 
-		while(!(xmlStrEqual((xmlChar*)"type",anode->name)) && anode->next) 
+		while(!(xmlStrEqual((xmlChar*)&xsdType,anode->name)) && anode->next) 
 				anode=anode->next ;
 
-		if(xmlStrEqual((xmlChar*)"type",anode->name) && anode != NULL && anode->children != NULL) 
+		if(xmlStrEqual((xmlChar*)&xsdType,anode->name) && anode != NULL && anode->children != NULL) 
 				return (xmlChar*) anode->children->content ;
 
-		return (xmlChar*)"\0";
+		return (xmlChar*)&nullstring;
 }
 
 
@@ -106,18 +111,31 @@ xmlChar* getComplexTypeName(xmlNodePtr node) {
 		xmlNodePtr tmp2;
 
 		for(tmp2=node ; tmp2 ; tmp2=tmp2->parent) {
-				if(xmlStrEqual((const xmlChar*)"element",tmp2->name) && 
+				if(xmlStrEqual((const xmlChar*)"element",tmp2->name) &&
 								(tmp2->properties != NULL) && (tmp2->properties->children != NULL))
 						return (xmlChar*)tmp2->properties->children->content;
 		}
 
 		for(tmp2=node ; tmp2 ; tmp2=tmp2->prev) {
-				if(xmlStrEqual((const xmlChar*)"element",tmp2->name) && 
+				if(xmlStrEqual((const xmlChar*)"element",tmp2->name) &&
 								(tmp2->properties != NULL) && (tmp2->properties->children != NULL))
 						return (xmlChar*)tmp2->properties->children->content;
 		}
 
-		return (xmlChar*)"\0" ;
+		return (xmlChar*)&nullstring ;
+}
+
+void print(xmlNodePtr node) {
+
+		xmlNodePtr t ;
+
+		for(t=node ; t->parent ; t=t->parent) ;
+
+		if(t->prev != NULL) {
+			printf("%s - ", node->name);
+			printf("%s ", t->name) ;
+		}
+
 }
 
 /* Given a node, get the schema name */
@@ -127,7 +145,7 @@ xmlChar* getSchemaName(xmlNodePtr node) {
 		if(node->properties->children != NULL)
 				return (xmlChar*)node->properties->children->content ;
 
-		return (xmlChar*)"\0" ;
+		return (xmlChar*)&nullstring ;
 }
 
 /* Given a node, get the element name assosiated with it by traversing to child or next */
@@ -141,7 +159,7 @@ xmlChar* getElementName(xmlNodePtr node) {
 		if(anode != NULL && anode->children != NULL) 
 				return (xmlChar*) anode->children->content ;
 
-		return (xmlChar*)"\0" ;
+		return (xmlChar*)&nullstring ;
 }
 
 /* Given a node, get min occurs property */
@@ -155,7 +173,7 @@ xmlChar* getMinOccurs(xmlNodePtr node) {
 		if(xmlStrEqual((const xmlChar*)"minOccurs",anode->name) && anode != NULL && anode->children != NULL) 
 				return (xmlChar*) anode->children->content ;
 
-		return (xmlChar*)"\0" ;
+		return (xmlChar*)&nullstring ;
 
 }
 
@@ -170,7 +188,69 @@ xmlChar* getMaxOccurs(xmlNodePtr node) {
 		if(xmlStrEqual((const xmlChar*)"maxOccurs",anode->name) && anode != NULL && anode->children != NULL) 
 				return (xmlChar*) anode->children->content ;
 		else
-				return (xmlChar*)"\0" ;
+				return (xmlChar*)&nullstring ;
 
-		return (xmlChar*)"\0" ;
+		return (xmlChar*)&nullstring ;
 }
+
+/* Walk the xsd schema and build a list of required name and properties */
+
+extern int walkXsdSchema(xmlNodePtr root)
+{
+		xmlNodePtr	    node;
+		char elementName[100];
+		char minO[100];
+		char maxO[100];
+		char gtype[100];
+		memset( elementName, '\0', sizeof(char)*100 );
+		memset( minO, '\0', sizeof(char)*100 );
+		memset( maxO, '\0', sizeof(char)*100 );
+		memset( gtype, '\0', sizeof(char)*100 );
+		xmlChar xsdcType[12]="complexType\0";
+		xmlChar xsdeType[8]="element\0";
+		xmlChar xsdsType[7]="schema\0";
+
+    for (node = root; node; node = node->next) {
+			if (xmlStrEqual(node->name, (const xmlChar *)xsdcType)) {
+					strcpy(complexName, (char*)getComplexTypeName(node));
+			}
+
+			if (xmlStrEqual(node->name, (const xmlChar *)xsdeType) && node->properties != NULL)  {
+				print(root);
+					strcpy(elementName, (char*)getElementName(node)) ;
+					strcpy(minO, (char*)getMinOccurs(node));
+					strcpy(maxO, (char*)getMaxOccurs(node));
+					if(!(buildArrayTree((xmlChar*)complexName, (xmlChar*)elementName, (xmlChar*)minO, (xmlChar*)maxO, getType(node)))) {
+						    memset( complexName, '\0', sizeof(char)*100 );
+							exit(0) ; 
+					}
+			}
+			walkXsdSchema(node->children);
+	}
+	return (1) ; 
+}
+
+/* print the build list -- debuging */
+
+extern void print_array_elements() {
+
+		xmlArrayDefPtr t ;
+
+		for(t=xsdmaproot ; t ; t=t->next) 
+				printf("%s -> %s [ %lu , %d ] %s, %d\n", t->complexName, t->elemName, t->minOccurs, t->maxOccurs, t->type, t->isArray);
+
+}
+
+extern void xsdschemafree() {
+
+		xmlArrayDefPtr t=xsdmaproot ;
+		xmlArrayDefPtr j=NULL;
+
+		while(t) {
+				j = t ;
+				t=j->next ;
+				free(j) ;
+		}
+}
+
+

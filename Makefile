@@ -37,6 +37,7 @@ LIBOBJS = \
 	htable.o \
 	json.o \
 	util.o \
+	parsexsd.o \
 	xml2json.o
 
 all: clean xml2json
