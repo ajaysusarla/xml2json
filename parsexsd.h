@@ -14,59 +14,51 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
+#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 
-/* Structure to hold node name, isArray flag derived from min and max occurs
- * from XSD. There is no prev pointer as the search for the nodeName always
- start from root node
+/*prototypes */
 
-TODO: Incorporate the type as well and pass it on to JsonObject
-TODO: Add macros to derive the isArray from min/max occurs
+xmlChar* getMinOccurs(xmlNodePtr node) ;
+xmlChar* getMaxOccurs(xmlNodePtr node) ;
+extern void print_array_elements(void);
+xmlChar* getElementName(xmlNodePtr node); 
+xmlChar* getSchemaName(xmlNodePtr node);
+xmlChar* getComplexTypeName(xmlNodePtr node) ;
+xmlChar* getType(xmlNodePtr node) ;
+extern int walkXsdSchema(xmlNodePtr root);
+extern void xsdschemafree(void);
 
+int buildArrayTree(xmlChar* complexName, xmlChar* elemName, xmlChar* minO, xmlChar* maxO, xmlChar* type);
 
-struct xsdNodeInfo {
-		xmlChar* nodeName ;
-		int nodeType ;
-		int minOccurs ;
-		int maxOccurs ;
-		int isArray ;
-		struct xsdNodeInfo *next ;
+/* Array type - based on the min/max combinations following are the outcomes */
+
+enum arraytype {
+		SINGLE_ELEMENT,
+	   	OPTIONAL_OR_ARRAY, 
+		MANDATORY_AND_ARRAY,
 };
 
-typedef struct xsdNodeInfo* xsdNodeInfo ;
+/* Struct to hold elements which are defined as arrays from XSD 
+ * 
+ * TODO: For now it's in a struct - the primary reason for this is not to walk the XSD for each element
+ * with in XML, find a better way of internal representation 
+ */
 
+struct xmlArrayDef {
+		xmlChar* complexName;
+		xmlChar* elemName;
+		xmlChar* type;
+		long minOccurs;
+		int maxOccurs;
+		enum arraytype isArray;
+		struct xmlArrayDef *next ;
+};
 
-Allocate memory for struct and return pointer, if fails return -1 : caller has to free it 
-TODO: Convert the mem and str functions from the xml2json library 
+typedef struct xmlArrayDef *xmlArrayDefPtr ;
 
-int xsdNodeInfo_init(xsdNodeInfo* n) {
-
-		n = malloc(sizeof(struct xsdNodeInfo)) ;
-		n->nodeName = malloc(sizeof(char)*50) ;
-		n->minOccurs = 0 ;
-		n->maxOccurs = 0 ;
-		n->next = NULL ;
-		return n;
-}
- Populate the xsdNodeInfo struct from XSD, if not found return NULL */
-
-static inline int getNodeInfo(xmlNodePtr xsdroot, xmlNodePtr node)
-{
-        xmlNodePtr n = NULL ;
-
-        if(xsdroot == NULL || node == NULL)
-                return 0;
-
-        for (n = xsdroot; n; n = n->next) {
-                if (((n->properties != NULL)) &&
-                    xmlStrEqual(n->name, node->name)) {
-                        return 1 ;
-                }
-                getNodeInfo(xsdroot, node->children);
-        }
-        return 0;
-}

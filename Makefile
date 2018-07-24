@@ -37,6 +37,7 @@ LIBOBJS = \
 	htable.o \
 	json.o \
 	util.o \
+	parsexsd.o \
 	xml2json.o
 
 all: clean xml2json
@@ -47,7 +48,7 @@ Makefile.dep:
 -include Makefile.dep
 
 %.o : %.c
-	gcc $(CFLAGS) -c $<
+	gcc $(CFLAGS) -c -g $<
 
 xml2json: $(LIBOBJS)
 	gcc $(LIBXML_LIBS) $(LIBOBJS) -o xml2json
