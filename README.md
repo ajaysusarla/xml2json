@@ -12,3 +12,9 @@ To build run `make` in the current directory.
 
 Requires `libxml2`.
 
+### Example
+
+./xml2json cust.xml -x"cust.xsd" - convert using XSD schema
+
+./xml2json cust.xml 
+
