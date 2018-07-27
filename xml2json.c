@@ -251,12 +251,6 @@ static int parse_xml_element_node(xmlNodePtr node, struct xml_htable *ht,
                 has_attr = 1;
         }
 
-        val = parse_xmlnode(node->children, type);
-        if (has_attr && *type == ENTRY_TYPE_NULL) {
-                if (val) free(val);
-                return has_attr;
-        }
-
         xml_htable_put(ht, (char *)node->name, xmlStrlen(node->name),
                        val, *type);
 
