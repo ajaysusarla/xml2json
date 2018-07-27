@@ -24,41 +24,46 @@ extern "C" {
 
 /*prototypes */
 
-xmlChar* getMinOccurs(xmlNodePtr node) ;
-xmlChar* getMaxOccurs(xmlNodePtr node) ;
+xmlChar* getMinOccurs(xmlNodePtr node);
+xmlChar* getMaxOccurs(xmlNodePtr node);
 extern void print_array_elements(void);
-xmlChar* getElementName(xmlNodePtr node); 
+xmlChar* getElementName(xmlNodePtr node);
 xmlChar* getSchemaName(xmlNodePtr node);
-xmlChar* getComplexTypeName(xmlNodePtr node) ;
-xmlChar* getType(xmlNodePtr node) ;
+xmlChar* getComplexTypeName(xmlNodePtr node);
+xmlChar* getType(xmlNodePtr node);
 extern int walkXsdSchema(xmlNodePtr root);
 extern void xsdschemafree(void);
 
-int buildArrayTree(xmlChar* complexName, xmlChar* elemName, xmlChar* minO, xmlChar* maxO, xmlChar* type);
+int buildArrayTree(xmlChar* complexName, xmlChar* elemName, xmlChar* minO,
+                   xmlChar* maxO, xmlChar* type);
 
 /* Array type - based on the min/max combinations following are the outcomes */
 
 enum arraytype {
-		SINGLE_ELEMENT,
-	   	OPTIONAL_OR_ARRAY, 
-		MANDATORY_AND_ARRAY,
+        SINGLE_ELEMENT,
+        OPTIONAL_OR_ARRAY,
+        MANDATORY_AND_ARRAY,
 };
 
-/* Struct to hold elements which are defined as arrays from XSD 
- * 
- * TODO: For now it's in a struct - the primary reason for this is not to walk the XSD for each element
- * with in XML, find a better way of internal representation 
+/* Struct to hold elements which are defined as arrays from XSD
+ *
+ * TODO: For now it's in a struct - the primary reason for this is not to walk
+ *  the XSD for each element with in XML, find a better way of internal
+ *  representation
  */
 
 struct xmlArrayDef {
-		xmlChar* complexName;
-		xmlChar* elemName;
-		xmlChar* type;
-		long minOccurs;
-		int maxOccurs;
-		enum arraytype isArray;
-		struct xmlArrayDef *next ;
+        xmlChar* complexName;
+        xmlChar* elemName;
+        xmlChar* type;
+        long minOccurs;
+        int maxOccurs;
+        enum arraytype isArray;
+        struct xmlArrayDef *next;
 };
 
-typedef struct xmlArrayDef *xmlArrayDefPtr ;
+typedef struct xmlArrayDef *xmlArrayDefPtr;
 
+#ifdef __cplusplus
+}
+#endif
