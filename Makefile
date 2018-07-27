@@ -51,7 +51,7 @@ Makefile.dep:
 	gcc $(CFLAGS) -c -g $<
 
 xml2json: $(LIBOBJS)
-	gcc $(LIBXML_LIBS) $(LIBOBJS) -o xml2json
+	gcc $(LIBOBJS) $(LIBXML_LIBS) -o xml2json
 
 check-syntax:
 	gcc $(CFLAGS) -Wextra -pedantic -fsyntax-only $(CHK_SOURCES)
